@@ -73,7 +73,9 @@ app.get('/get-messages', async (req, res) => {
                 { senderId, receiverId },
                 { senderId: receiverId, receiverId: senderId }
             ]
-        }).sort({ timestamp: 1 });
+        }).sort({ timestamp: 1 })
+            .populate("senderId", "name")
+            .populate("receiverId", "name");
 
         res.json({
             success: true,
