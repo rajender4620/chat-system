@@ -35,8 +35,8 @@ app.post('/send-message', async (req, res) => {
 
     if (!senderId || !receiverId || !message) {
         return res.status(400).json({ message: 'Missing fields' });
-
     }
+
     try {
         const newMessage = await Message.create({
             senderId,
@@ -73,7 +73,7 @@ app.get('/get-messages', async (req, res) => {
                 { senderId, receiverId },
                 { senderId: receiverId, receiverId: senderId }
             ]
-        }).sort({ timestamp: 1 })
+        }).sort({ createdAt: 1 })
             .populate("senderId", "name")
             .populate("receiverId", "name");
 
