@@ -1,5 +1,6 @@
 import express from 'express'
 import mongoose from 'mongoose'
+import cors from 'cors'
 import dotenv from 'dotenv'
 /** @type {import('mongoose').Model} */
 import Message from './models/Message.js'
@@ -10,6 +11,7 @@ dotenv.config();
 
 const app = express();
 
+app.use(cors())
 // Middleware to parse JSON request bodies
 app.use(express.json());
 
@@ -84,6 +86,18 @@ app.get('/get-messages', async (req, res) => {
     } catch (error) {
         console.error('Error fetching messages:', error);
         res.status(500).json({ error: 'Failed to fetch messages' });
+    }
+});
+
+
+// Get the list of all users (so the frontend can show who you can chat with)
+app.get("/users", async (_req, res) => {
+    try {
+        const users = await User.find({}, "name"); // find all users, only return the "name" field (+ _id)
+        res.json({ success: true, data: users });
+    } catch (error) {
+        console.error('Error fetching users:', error);
+        res.status(500).json({ error: 'Failed to fetch users' });
     }
 });
 

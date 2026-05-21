@@ -1,0 +1,8 @@
+/* Global styles that apply to the WHOLE page.
+   "body" is the entire page area. */
+body {
+  margin: 0;                          /* remove default white space around the page */
+  background: #f4f4f7;                /* light gray page background */
+  color: #222;                        /* default text color (dark gray) */
+  font-family: system-ui, sans-serif;
+}
