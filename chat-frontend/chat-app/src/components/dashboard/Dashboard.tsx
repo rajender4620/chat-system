@@ -1,79 +1,92 @@
-import { useEffect } from "react"
-import { useNavigate } from "react-router-dom"
-import "./dashboard.css"
-
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import "./dashboard.css";
+import ChatPanel from "../chat_panel/Chat_panel";
 
 type User = {
-  _id: string
-  name: string
-}
-
+  _id: string;
+  name: string;
+};
 
 function Dashboard() {
-  const navigate = useNavigate()
-  const raw = sessionStorage.getItem('user')
-  const me: User | null = raw ? JSON.parse(raw) : null
+  const navigate = useNavigate();
+  const raw = sessionStorage.getItem("user");
+  const me: User | null = raw ? JSON.parse(raw) : null;
+
+  const [users, setUsers] = useState<User[]>([]);
+  const [search, setSearch] = useState('');
+  const [selectedUserId, setselectedUserId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!me) navigate('/')
-  }, [me, navigate])
+    if (!me) navigate("/");
+  }, [me, navigate]);
 
-  if (!me) return null
+  useEffect(() => {
+    const loadUsers = async () => {
+      try {
+        const res = await fetch("http://localhost:3000/users", {
+          method: "GET",
+          headers: {
+            "content-type": "application/json",
+          },
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        setUsers(json.data);
+      } catch (error) {
+        console.error("Failed to load users:", error);
+      }
+    };
+    loadUsers();
+  }, []);
+
+
+  if (!me) return null;
+
+  const others = users.filter((e) => e._id !== me._id).filter((e) => e.name.toLowerCase().includes(search.toLowerCase()));
+
 
 
   return (
     <div className="dashboard">
-
       {/* ── 30% LEFT: sidebar with search + user list ─────── */}
       <aside className="sidebar">
-
         {/* Header — shows logged-in user's name */}
-        <div className="sidebar-header">
-          {me.name}
-        </div>
+        <div className="sidebar-header">{me.name}</div>
 
         {/* Search bar — YOU will wire this to state + filter the list */}
         <div className="sidebar-search">
           <input
             type="text"
             placeholder="Search users…"
-          /* TODO (you): value={search} onChange={...} */
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+            }}
           />
         </div>
 
         {/* User list — YOU will replace this with .map() over real users */}
         <div className="user-list">
-
-          {/* PLACEHOLDER ITEM 1 — duplicate this row when you map real data */}
-          <div className="user-item">
-            <div className="user-avatar">A</div>
-            <div className="user-name">Alice (placeholder)</div>
-          </div>
-
-          {/* PLACEHOLDER ITEM 2 */}
-          <div className="user-item active">
-            <div className="user-avatar">B</div>
-            <div className="user-name">Bob (placeholder, active state)</div>
-          </div>
-
-          {/* PLACEHOLDER ITEM 3 */}
-          <div className="user-item">
-            <div className="user-avatar">C</div>
-            <div className="user-name">Charlie (placeholder)</div>
-          </div>
-
+          {others.map((u) => (
+            <div
+              key={u._id}
+              className={u._id === selectedUserId ? 'user-item active' : 'user-item'}
+              onClick={() => setselectedUserId(u._id)}
+            >
+              <div className="user-avatar">{u.name[0].toUpperCase()}</div>
+              <div className="user-name">{u.name}</div>
+            </div>
+          ))}
         </div>
-
       </aside>
 
-
-      {/* ── 70% RIGHT: chat area (empty for now) ──────────── */}
+      {/* ── 70% RIGHT: chat area ─────────────────────────── */}
       <main className="chat-area">
-        Select a user to start chatting
+        <ChatPanel partnerId={selectedUserId} myId={me._id} ></ChatPanel>
       </main>
-
     </div>
-  )
+  );
 }
 
-export default Dashboard
+export default Dashboard;

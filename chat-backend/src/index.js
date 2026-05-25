@@ -81,7 +81,9 @@ app.get('/get-messages', async (req, res) => {
 
         res.json({
             success: true,
-            data: chat
+            data: chat,
+            total: chat.length
+
         });
     } catch (error) {
         console.error('Error fetching messages:', error);
@@ -110,6 +112,8 @@ app.get('/users', async (req, res) => {
 });
 
 
+// "Login or create" — looks up the user by name; creates them if missing.
+// TEMPORARY pattern for the MVP. Phase 2 replaces this with proper JWT auth (signup + login + password).
 app.post("/users", async (req, res) => {
     const { name } = req.body;
 
@@ -118,22 +122,22 @@ app.post("/users", async (req, res) => {
     }
 
     try {
-        const user = await User.create(
-            {
-                name
-            }
-        );
+        // Try to find first
+        let user = await User.findOne({ name }).lean();
 
-        res.status(201).json(
-            {
-                success: true,
-                message: 'User created successfully',
-                data: user
-            }
-        );
+        // If not found, create
+        if (!user) {
+            const created = await User.create({ name });
+            user = created.toObject();
+        }
+
+        res.json({
+            success: true,
+            data: user,
+        });
     } catch (error) {
-        console.error('Error creating user:', error);
-        res.status(500).json({ error: 'Failed to create user' });
+        console.error('Error in login-or-create:', error);
+        res.status(500).json({ error: 'Failed to login or create user' });
     }
 
 });
