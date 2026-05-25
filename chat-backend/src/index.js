@@ -90,14 +90,22 @@ app.get('/get-messages', async (req, res) => {
 });
 
 
-// Get the list of all users (so the frontend can show who you can chat with)
-app.get("/users", async (_req, res) => {
+app.get('/users', async (req, res) => {
     try {
-        const users = await User.find({}, "name"); // find all users, only return the "name" field (+ _id)
-        res.json({ success: true, data: users });
+        const users = await User.find({},);
+
+        return res.json({
+            data: users,
+            success: true
+
+        });
+
+
     } catch (error) {
-        console.error('Error fetching users:', error);
-        res.status(500).json({ error: 'Failed to fetch users' });
+        console.log(`error fetching users ${error}`)
+        res.status(500).json({
+            error: 'Failed to fetch users'
+        })
     }
 });
 

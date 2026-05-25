@@ -1,0 +1,116 @@
+/* ============================================================
+   DASHBOARD LAYOUT
+   - Full-screen split: 30% sidebar (users) | 70% chat area
+   - Flutter analogy: Row(children: [Expanded(flex:3, child: Sidebar), Expanded(flex:7, child: Chat)])
+   ============================================================ */
+
+.dashboard {
+  display: flex;              /* lay sidebar + chat in a row */
+  height: 100vh;              /* full viewport height (100% of the screen) */
+  width: 100vw;               /* full viewport width */
+  background: #f4f4f7;
+}
+
+
+/* ── LEFT SIDEBAR (30%) ──────────────────────────────────── */
+
+.sidebar {
+  flex: 0 0 30%;              /* flex: grow=0 shrink=0 basis=30% → fixed 30% width */
+  display: flex;
+  flex-direction: column;     /* stack header, search, list vertically */
+  background: #ffffff;
+  border-right: 1px solid #e5e5e9;   /* separator line between sidebar and chat */
+  overflow: hidden;           /* prevent the whole sidebar from scrolling — only the list scrolls */
+}
+
+.sidebar-header {
+  padding: 20px 16px;
+  border-bottom: 1px solid #f0f0f3;
+  font-weight: 600;
+  font-size: 18px;
+  color: #1a1a1a;
+}
+
+.sidebar-search {
+  padding: 12px 16px;
+  border-bottom: 1px solid #f0f0f3;
+}
+
+.sidebar-search input {
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 14px;
+  border: 1px solid #e0e0e4;
+  border-radius: 20px;        /* fully rounded — modern search bar look */
+  background: #f6f6f9;
+  outline: none;
+  box-sizing: border-box;     /* include padding/border in the width calc */
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.sidebar-search input:focus {
+  border-color: #667eea;
+  background: #ffffff;
+}
+
+.user-list {
+  flex: 1;                    /* take all remaining vertical space */
+  overflow-y: auto;           /* scroll if the list is too long */
+  padding: 8px 0;
+}
+
+/* Each clickable row in the list */
+.user-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: background 0.1s;
+  border-bottom: 1px solid #f8f8fa;
+}
+
+.user-item:hover {
+  background: #f4f5fb;
+}
+
+.user-item.active {
+  background: #eef0fc;        /* highlight color for the currently-selected chat */
+}
+
+/* Avatar circle (placeholder — use initials or image) */
+.user-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;         /* perfect circle */
+  background: #c7d2fe;        /* light blue background */
+  color: #1e3a8a;
+  display: flex;
+  align-items: center;
+  justify-content: center;    /* center the initial inside */
+  font-weight: 600;
+  font-size: 14px;
+  flex-shrink: 0;             /* don't let it shrink when text is long */
+}
+
+.user-name {
+  font-size: 15px;
+  color: #1a1a1a;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;    /* show "..." if name is too long */
+  white-space: nowrap;
+}
+
+
+/* ── RIGHT CHAT AREA (70%) ───────────────────────────────── */
+
+.chat-area {
+  flex: 1;                    /* take all remaining horizontal space (the other 70%) */
+  display: flex;
+  align-items: center;
+  justify-content: center;    /* center the "empty state" message */
+  background: #ffffff;
+  color: #a0a0a8;
+  font-size: 16px;
+}
