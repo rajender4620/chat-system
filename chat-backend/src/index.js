@@ -40,11 +40,16 @@ app.post('/send-message', async (req, res) => {
     }
 
     try {
-        const newMessage = await Message.create({
+        const created = await Message.create({
             senderId,
             receiverId,
             message
         });
+
+        const newMessage = await Message.findById(created._id)
+            .populate('senderId', 'name')
+            .populate('receiverId', 'name')
+            .lean()
 
         res.json({
             success: true,

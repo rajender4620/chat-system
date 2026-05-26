@@ -25,10 +25,11 @@ function ChatPanel({ myId, partnerId }: ChatPanelPros) {
     const [draft, setDraft] = useState("");
 
     useEffect(() => {
+        if (!partnerId) return
         const fetchMessages = async () => {
             try {
                 const res = await fetch(
-                    "http://localhost:3000/get-messages?senderId=6a1405b5952966f9ab934586&receiverId=6a1405c9952966f9ab93469d",
+                    `http://localhost:3000/get-messages?senderId=${myId}&receiverId=${partnerId}`,
                     {
                         method: "GET",
                         headers: {
@@ -52,7 +53,7 @@ function ChatPanel({ myId, partnerId }: ChatPanelPros) {
     console.log(`partner id : ${partnerId}`);
 
     const handleSend = () => {
-         if (!partnerId || !draft.trim()) return 
+        if (!partnerId || !draft.trim()) return
 
         const sendMessage = async () => {
 
@@ -68,8 +69,8 @@ function ChatPanel({ myId, partnerId }: ChatPanelPros) {
             setMessages(prev => [...prev, optimisticMsg])
             setDraft('')
             const body = {
-                senderId: "6a1405b5952966f9ab934586",
-                receiverId: "6a1405c9952966f9ab93469d",
+                senderId: myId,
+                receiverId: partnerId,
                 message: draft,
             };
 
@@ -119,8 +120,10 @@ function ChatPanel({ myId, partnerId }: ChatPanelPros) {
             <div className="chat-messages">
                 {messages.length !== 0 &&
                     messages.map((msg) => {
-                        const isMine = msg.senderId._id === "6a1405b5952966f9ab934586";
-                        console.log();
+                        const isMine = msg.senderId._id === myId;
+                        console.log(`ismine ${isMine}`)
+                        console.log(`senderId ${msg.senderId._id}`)
+                        console.log(`sameid ${myId}`)
                         return (
                             <div
                                 key={msg._id}

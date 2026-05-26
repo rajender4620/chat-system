@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import "./dashboard.css";
 import ChatPanel from "../chat_panel/Chat_panel";
 
@@ -15,7 +15,12 @@ function Dashboard() {
 
   const [users, setUsers] = useState<User[]>([]);
   const [search, setSearch] = useState('');
-  const [selectedUserId, setselectedUserId] = useState<string | null>(null);
+
+  // URL is the source of truth for which chat is open.
+  // /dashboard           → no chat selected
+  // /dashboard?chat=abc  → chat with user abc is selected
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedUserId = searchParams.get('chat');
 
   useEffect(() => {
     if (!me) navigate("/");
@@ -72,7 +77,7 @@ function Dashboard() {
             <div
               key={u._id}
               className={u._id === selectedUserId ? 'user-item active' : 'user-item'}
-              onClick={() => setselectedUserId(u._id)}
+              onClick={() => setSearchParams({ chat: u._id })}
             >
               <div className="user-avatar">{u.name[0].toUpperCase()}</div>
               <div className="user-name">{u.name}</div>
