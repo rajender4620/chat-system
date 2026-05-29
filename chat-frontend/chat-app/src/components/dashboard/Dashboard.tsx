@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import "./dashboard.css";
 import ChatPanel from "../chat_panel/Chat_panel";
 import { io, Socket } from "socket.io-client";
+import { API_URL } from "../../config";
 
 type User = {
   _id: string;
@@ -32,7 +33,7 @@ function Dashboard() {
   useEffect(() => {
     const loadUsers = async () => {
       try {
-        const res = await fetch("http://localhost:3000/users", {
+        const res = await fetch(`${API_URL}/users`, {
           method: "GET",
           headers: {
             "content-type": "application/json",
@@ -50,7 +51,7 @@ function Dashboard() {
 
 
   useEffect(() => {
-    const s = io('http://localhost:3000')
+    const s = io(API_URL)
     s.on('connect', () => {
       console.log('Connected to server, socket id:', s.id)
       s.emit('join', me?._id)

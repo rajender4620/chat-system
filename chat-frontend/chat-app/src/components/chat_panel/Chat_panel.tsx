@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, Fragment } from "react";
 import type { Socket } from "socket.io-client";
+import { API_URL } from "../../config";
 
 type ChatPanelPros = {
     myId: string;
@@ -38,7 +39,7 @@ function ChatPanel({ myId, partnerId, socket, partnerName }: ChatPanelPros) {
         const fetchMessages = async () => {
             try {
                 const res = await fetch(
-                    `http://localhost:3000/get-messages?senderId=${myId}&receiverId=${partnerId}`,
+                    `${API_URL}/get-messages?senderId=${myId}&receiverId=${partnerId}`,
                     {
                         method: "GET",
                         headers: {
@@ -84,7 +85,7 @@ function ChatPanel({ myId, partnerId, socket, partnerName }: ChatPanelPros) {
             };
 
             try {
-                const res = await fetch("http://localhost:3000/send-message", {
+                const res = await fetch(`${API_URL}/send-message`, {
                     method: "POST",
                     headers: {
                         "content-type": "application/json",

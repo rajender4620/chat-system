@@ -3,6 +3,7 @@
 import { useState } from "react";
 import "./logic.css";
 import { useNavigate } from 'react-router-dom'
+import { API_URL } from "../../config";
 
 // A "function component" — the modern way to write React UI.
 // Flutter analogy: like a StatelessWidget's `build()` method.
@@ -36,7 +37,7 @@ function Login() {
                         console.log(name);   // log the captured value, not the event object
 
                         try {
-                            const res = await fetch('http://localhost:3000/users', {
+                            const res = await fetch(`${API_URL}/users`, {
                                 method: "POST",
                                 headers: {
                                     'content-type': 'application/json'
