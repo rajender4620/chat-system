@@ -1,8 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, Fragment } from "react";
+import type { Socket } from "socket.io-client";
 
 type ChatPanelPros = {
     myId: string;
     partnerId: string | null;
+    socket?: Socket | null;
+    partnerName?: string | null;
 };
 
 type Message = {
@@ -20,9 +23,15 @@ type Message = {
     updatedAt?: string
 };
 
-function ChatPanel({ myId, partnerId }: ChatPanelPros) {
+function ChatPanel({ myId, partnerId, socket, partnerName }: ChatPanelPros) {
     const [messages, setMessages] = useState<Message[]>([]);
     const [draft, setDraft] = useState("");
+    const bottomRef = useRef<HTMLDivElement>(null)
+    const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const [partnerTyping, setPartnerTyping] = useState(false)
+
+
+
 
     useEffect(() => {
         if (!partnerId) return
@@ -101,6 +110,61 @@ function ChatPanel({ myId, partnerId }: ChatPanelPros) {
         sendMessage();
     };
 
+
+
+    useEffect(() => {
+        if (!socket) return;
+
+        // handler for incoming messages
+        const handleNewMessage = (msg: Message) => {
+            if (msg.senderId._id === partnerId) {
+                setMessages(prev => [...prev, msg])
+            }
+
+        }
+
+        socket.on('new-message', handleNewMessage)
+        return () => {
+            socket.off('new-message', handleNewMessage)
+        }
+
+    }, [socket, partnerId])
+
+    useEffect(() => {
+        bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }, [messages])
+
+    const handleTyping = () => {
+        if (!socket || !partnerId) return;
+
+        socket.emit('typing', { to: partnerId, from: myId });
+
+        // reset the "stopped typing" timer
+        if (typingTimeout.current) clearTimeout(typingTimeout.current)
+        typingTimeout.current = setTimeout(() => {
+            socket.emit('stop-typing', { to: partnerId, from: myId })
+        }, 1500)
+    }
+    useEffect(() => {
+        if (!socket) return
+
+        const onTyping = ({ from }: { from: string }) => {
+            if (from === partnerId) setPartnerTyping(true)
+        }
+        const onStopTyping = ({ from }: { from: string }) => {
+            if (from === partnerId) setPartnerTyping(false)
+        }
+
+        socket.on('typing', onTyping)
+        socket.on('stop-typing', onStopTyping)
+
+        return () => {
+            socket.off('typing', onTyping)
+            socket.off('stop-typing', onStopTyping)
+        }
+    }, [socket, partnerId])
+
+
     if (!partnerId) {
         return <div className="chat-empty">Select a user to start chatting</div>;
     }
@@ -108,31 +172,36 @@ function ChatPanel({ myId, partnerId }: ChatPanelPros) {
         <>
             {/* HEADER — partner info */}
             <div className="chat-header">
-                <div className="chat-avatar">B</div>
+                <div className="chat-avatar">{partnerName?.[0]?.toUpperCase()}</div>
                 <div className="chat-header-info">
-                    <span className="chat-header-name">Bob (placeholder)</span>
-                    <span className="chat-header-status">online</span>
+                    <span className="chat-header-name">{partnerName}</span>
+                    <span className="chat-header-status">
+                        {partnerTyping ? 'typing…' : 'online'}
+                    </span>
+
                 </div>
             </div>
 
             {/* MESSAGES — scrollable list of bubbles.
             YOU will replace these placeholders with .map() over real messages */}
             <div className="chat-messages">
-                {messages.length !== 0 &&
-                    messages.map((msg) => {
-                        const isMine = msg.senderId._id === myId;
-                        console.log(`ismine ${isMine}`)
-                        console.log(`senderId ${msg.senderId._id}`)
-                        console.log(`sameid ${myId}`)
-                        return (
-                            <div
-                                key={msg._id}
-                                className={isMine ? "chat-bubble sent" : "chat-bubble received"}
-                            >
+                {messages.map((msg) => {
+                    const isMine = msg.senderId._id === myId
+                    const time = new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    return (
+                        <Fragment key={msg._id}>
+                            <div className={isMine ? 'chat-bubble sent' : 'chat-bubble received'}>
                                 {msg.message}
                             </div>
-                        );
-                    })}
+                            <span className={isMine ? 'chat-time sent' : 'chat-time received'}>
+                                {time}
+                            </span>
+                        </Fragment>
+                    )
+                })}
+
+
+                <div ref={bottomRef} />        {/* ← invisible scroll anchor */}
             </div>
 
             {/* INPUT — pinned to bottom */}
@@ -142,7 +211,11 @@ function ChatPanel({ myId, partnerId }: ChatPanelPros) {
                     className="chat-input"
                     placeholder="Type a message…"
                     value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
+                    onChange={(e) => {
+                        setDraft(e.target.value)
+                        handleTyping();
+
+                    }}
                     onKeyDown={(e) => {
                         if (e.key === "Enter") {
                             handleSend(); // run the same code as the Send button

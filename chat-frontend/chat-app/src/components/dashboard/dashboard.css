@@ -87,6 +87,7 @@
 
 /* Avatar circle (placeholder — use initials or image) */
 .user-avatar {
+  position: relative;         /* positioning context for the online dot */
   width: 40px;
   height: 40px;
   border-radius: 50%;         /* perfect circle */
@@ -98,6 +99,18 @@
   font-weight: 600;
   font-size: 14px;
   flex-shrink: 0;             /* don't let it shrink when text is long */
+}
+
+/* Green "online" badge — sits in the bottom-right corner of the avatar */
+.online-dot {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 11px;
+  height: 11px;
+  background: #22c55e;        /* green */
+  border: 2px solid #fff;     /* white ring so it pops against any background */
+  border-radius: 50%;         /* circle */
 }
 
 .user-name {

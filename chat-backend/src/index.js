@@ -1,12 +1,16 @@
 import express from 'express'
-import mongoose from 'mongoose'
+import mongoose, { set } from 'mongoose'
 import cors from 'cors'
 import dotenv from 'dotenv'
 /** @type {import('mongoose').Model} */
 import Message from './models/Message.js'
 /** @type {import('mongoose').Model} */
 import User from './models/User.js'
+import { createServer } from 'http'
+import { Server } from 'socket.io'
 
+
+const onlineUsers = new Set();
 dotenv.config();
 
 const app = express();
@@ -50,6 +54,13 @@ app.post('/send-message', async (req, res) => {
             .populate('senderId', 'name')
             .populate('receiverId', 'name')
             .lean()
+
+
+
+        // NEW: push the message to the receiver's room in real-time
+        io.to(receiverId).emit('new-message', newMessage)
+        console.log('Emitted new-message to room:', receiverId)
+
 
         res.json({
             success: true,
@@ -149,6 +160,63 @@ app.post("/users", async (req, res) => {
 
 
 
-app.listen(3000, () => {
-    console.log('Server is running on http://localhost:3000')
+//Why CORS again?
+//Express has its own CORS middleware (you set that up earlier). Socket.IO has its own separate CORS config because WebSocket upgrade requests bypass Express middleware entirely.
+
+//The cors: { origin: '*' } allows the frontend (port 5173) to connect to the Socket.IO server (port 3000). In production you'd lock it to your real domain.
+
+//Socket.IO needs the raw Node HTTP server, not Express's wrapper. Express runs ON TOP of HTTP — but Socket.IO needs to attach AT the HTTP level so it can intercept WebSocket upgrade requests.
+//Both Express and Socket.IO share the same HTTP server.
+// 1. Wrap the express app in a raw HTTP server
+const httpServer = createServer(app);
+
+const io = new Server(httpServer, {
+    cors: {
+        origin: '*', //    // allow any origin (dev only — tighten later)
+        methods: ['GET', 'POST'],
+    }
 })
+
+// 3. Listen for connections
+io.on('connection', (socket) => {
+    // TODO 1: console.log when a user connects.
+    //         Hint: socket.id is a unique ID auto-assigned to each connection.
+
+    // 1. Log when a new connection opens
+    console.log('User connected:', socket.id)
+
+    socket.on('join', (userId) => {
+        socket.join(userId)
+        console.log(`Socket ${socket.id} joined room ${userId}`)
+        socket.data.userId = userId
+        onlineUsers.add(userId)
+        io.emit('online-users', Array.from(onlineUsers)) // ← tell EVERYONE the new list
+
+    })
+
+    socket.on('typing', ({ to, from }) => {
+        socket.to(to).emit('typing', { from })
+
+    })
+    socket.on('stop-typing', ({ to, from }) => {
+        io.to(to).emit('stop-typing', { from })
+    })
+
+
+
+    // 2. Log when connection closes (browser closed, network drop, etc.)
+    socket.on('disconnect', () => {
+        if (socket.data.userId) {
+            onlineUsers.delete(socket.data.userId)              // ← mark offline
+            io.emit('online-users', Array.from(onlineUsers))
+        }
+        console.log('User disconnected:', socket.id)
+    })
+})
+
+
+// 4. Listen on the HTTP server (NOT app.listen anymore!)
+
+httpServer.listen(3000, () => {
+    console.log('Server is running on http://localhost:3000')
+});
