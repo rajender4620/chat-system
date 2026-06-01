@@ -1,5 +1,5 @@
 import express from 'express'
-import mongoose, { set } from 'mongoose'
+import mongoose from 'mongoose'
 import cors from 'cors'
 import dotenv from 'dotenv'
 /** @type {import('mongoose').Model} */
@@ -8,19 +8,72 @@ import Message from './models/Message.js'
 import User from './models/User.js'
 import { createServer } from 'http'
 import { Server } from 'socket.io'
+import bcrypt from 'bcryptjs'
+import jwt from 'jsonwebtoken'
 
 
+// In-memory set of currently connected user IDs.
+// WHY: tracking online status without a DB round-trip — flushed on server restart.
+// In production you'd back this with Redis so it survives restarts + works across multiple instances.
 const onlineUsers = new Set();
+
 dotenv.config();
+const JWT_SECRET = process.env.JWT_SECRET;
+
+// WHY: fail fast at startup if the secret is missing.
+// Without it, jwt.sign throws cryptic errors per-request instead of one clear startup error.
+if (!JWT_SECRET) {
+    throw new Error('JWT_SECRET is missing in .env');
+}
+
+
+/**
+ * Auth middleware. Runs BEFORE protected route handlers.
+ * WHY exists: a token verified here is the ONLY trusted source of "who is calling".
+ * Route handlers should read req.userId from this, never from req.body / req.query —
+ * otherwise an authenticated user could impersonate another by passing their ID (IDOR).
+ */
+function requireAuth(req, res, next) {
+    // WHY split on space: industry convention "Authorization: Bearer <token>"
+    const authHeader = req.headers.authorization
+    const token = authHeader?.split(' ')[1]
+
+    if (!token) {
+        return res.status(401).json({ error: 'No token provided' })
+    }
+
+    try {
+        // WHY the JSDoc cast: jwt.verify's return type is `string | JwtPayload`.
+        // Casting tells TS the payload shape we put in at signing time.
+        const decoded = /** @type {{ userId: string }} */ (
+            jwt.verify(token, process.env.JWT_SECRET)
+        )
+
+        // WHY attach to req: makes the verified userId available to the route handler
+        // — same trick as Express's own req.body via express.json() middleware.
+        req.userId = decoded.userId
+        next()
+    } catch (error) {
+        // WHY catch: jwt.verify THROWS on invalid/expired/malformed tokens.
+        // One catch covers all failure modes; client gets a clean 401.
+        return res.status(401).json({ error: 'Invalid or expired token' })
+    }
+}
+
 
 const app = express();
 
+// WHY cors(): the frontend runs on a different origin (different port in dev,
+// different domain in prod). Browsers block cross-origin requests by default.
+// This middleware adds the headers that tell the browser "yes, this is allowed".
 app.use(cors())
-// Middleware to parse JSON request bodies
+
+// WHY express.json(): POST bodies arrive as raw bytes. This parses
+// `Content-Type: application/json` bodies into req.body. Without it,
+// req.body is undefined — the cause of "Cannot destructure 'name' of undefined" bugs.
 app.use(express.json());
 
-//'mongodb+srv://rajender4620_db_user:kpm03mY6XzL7cSAQ@cluster0.yvqebx9.mongodb.net/chat-system'
-// MongoDB connection
+
 mongoose.connect(process.env.MONGODB_URI)
     .then(() => {
         console.log('Connected to MongoDB');
@@ -30,37 +83,133 @@ mongoose.connect(process.env.MONGODB_URI)
     });
 
 
+// Health-check / liveness probe. Useful for hosting platforms (Render, etc.) that ping the root.
 app.get('/', (req, res) => {
     res.send('Hello World')
 })
 
 
-app.post('/send-message', async (req, res) => {
+app.post('/sign-up', async (req, res) => {
+    try {
+        const { name, email, password } = req.body;
 
-    const { senderId, receiverId, message } = req.body;
+        if (!name || !email || !password) {
+            // WHY 400 (not 401): the request is malformed (missing data).
+            // 401 means "auth required/failed" — different semantic.
+            return res.status(400).json({ message: 'Missing fields' })
+        }
+
+        // WHY check first: we want a clean 409 instead of a Mongoose duplicate-key error.
+        // (For production at scale, add a unique index on `email` and catch the duplicate error
+        //  to avoid a race condition between this check and User.create.)
+        const userExist = await User.findOne({ email })
+        if (userExist) {
+            // WHY 409 Conflict: REST convention for "resource already exists".
+            return res.status(409).json({ error: 'Email already in use' })
+        }
+
+        // WHY hash cost 10: bcrypt is deliberately SLOW. Cost factor controls how slow.
+        // 10 = ~100ms per hash on modern hardware — fast enough for users, slow enough
+        // that an attacker brute-forcing leaked hashes can only try ~10/sec per CPU.
+        const hashed = await bcrypt.hash(password, 10)
+
+        const user = await User.create({ name, email, password: hashed })
+
+        // WHY put only userId in payload: payload is base64 (NOT encrypted) — anyone can read it.
+        // Never put sensitive data in JWTs.
+        // WHY expiresIn '7d': limits damage if the token is stolen. After 7 days the user re-logs in.
+        const token = jwt.sign(
+            { userId: user._id },
+            process.env.JWT_SECRET,
+            { expiresIn: '7d' }
+        )
+
+        // WHY explicit user object (not `user`): NEVER return the password (even the hash).
+        // Limit attack surface — if this response is ever logged or cached, no credential exposure.
+        res.json({
+            success: true,
+            token,
+            user: { _id: user._id, name: user.name, email: user.email },
+        });
+
+    } catch (error) {
+        console.error('Signup error:', error)
+        res.status(500).json({ error: 'Failed to sign up' })
+    }
+})
+
+
+app.post('/login', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+
+        if (!email || !password) {
+            return res.status(400).json({ message: 'Missing fields' })
+        }
+
+        const user = await User.findOne({ email });
+
+        // WHY same generic message for both "user not found" and "wrong password":
+        // prevents email enumeration — attackers can't tell whether a given email
+        // is registered. Status code AND message must match between the two cases.
+        if (!user) {
+            return res.status(401).json({ error: 'Invalid email or password' })
+        }
+
+        // WHY bcrypt.compare: bcrypt is ONE-WAY — we can't decrypt the hash.
+        // .compare hashes the entered password with the same salt and checks equality.
+        const isMatch = await bcrypt.compare(password, user.password)
+        if (!isMatch) {
+            return res.status(401).json({ error: 'Invalid email or password' })
+        }
+
+        const token = jwt.sign(
+            { userId: user._id },
+            process.env.JWT_SECRET,
+            { expiresIn: '7d' }
+        )
+
+        res.json({
+            success: true,
+            token,
+            user: { _id: user._id, name: user.name, email: user.email },
+        })
+    } catch (error) {
+        console.error('Login error:', error)
+        res.status(500).json({ error: 'Failed to log in' })
+    }
+})
+
+
+app.post('/send-message', requireAuth, async (req, res) => {
+    // WHY req.userId (not req.body.senderId): the token is the ONLY trustworthy source of identity.
+    // If we read senderId from the body, an authenticated user could pass anyone else's ID
+    // and impersonate them. Classic IDOR vulnerability.
+    const senderId = req.userId
+    const { receiverId, message } = req.body;
 
     if (!senderId || !receiverId || !message) {
         return res.status(400).json({ message: 'Missing fields' });
     }
 
     try {
-        const created = await Message.create({
-            senderId,
-            receiverId,
-            message
-        });
+        const created = await Message.create({ senderId, receiverId, message });
 
+        // WHY re-fetch with populate + lean:
+        //   .populate() → expands senderId from an ID into { _id, name } so the frontend
+        //     doesn't need a second request to know who sent it. (Mongoose's JOIN equivalent.)
+        //   .lean() → returns a plain object instead of a Mongoose Document, which is
+        //     faster to serialize and avoids circular-reference issues with JSON.stringify.
+        //   The shape MUST match what GET /get-messages returns — frontend trusts a stable contract.
         const newMessage = await Message.findById(created._id)
             .populate('senderId', 'name')
             .populate('receiverId', 'name')
             .lean()
 
-
-
-        // NEW: push the message to the receiver's room in real-time
+        // WHY io.to(receiverId).emit (not io.emit): targeted delivery via the user's room.
+        // Each user joined a room named after their _id on connect, so this reaches ONLY them.
+        // The sender sees their message via optimistic UI; they don't need a separate emit.
         io.to(receiverId).emit('new-message', newMessage)
-        console.log('Emitted new-message to room:', receiverId)
-
 
         res.json({
             success: true,
@@ -74,33 +223,32 @@ app.post('/send-message', async (req, res) => {
 })
 
 
-
-
-app.get('/get-messages', async (req, res) => {
-    const { senderId, receiverId } = req.query;
+app.get('/get-messages', requireAuth, async (req, res) => {
+    // WHY senderId from token, receiverId from query: same IDOR-prevention rule.
+    // "Who I am" comes from the verified token; "who I'm chatting with" is a UI choice.
+    const senderId = req.userId
+    const { receiverId } = req.query
 
     if (!senderId || !receiverId) {
-        return res.status(400).json({
-            'error': 'Missing fields'
-        })
+        return res.status(400).json({ error: 'Missing fields' })
     }
 
     try {
+        // WHY $or with both directions: a conversation is bidirectional.
+        // Messages were stored with whoever sent them as senderId, so we need BOTH
+        // {senderId: me, receiverId: them} AND {senderId: them, receiverId: me}.
         const chat = await Message.find({
             $or: [
                 { senderId, receiverId },
                 { senderId: receiverId, receiverId: senderId }
             ]
-        }).sort({ createdAt: 1 })
+        })
+            // WHY sort by createdAt ASC: chat messages display oldest at top, newest at bottom.
+            .sort({ createdAt: 1 })
             .populate("senderId", "name")
             .populate("receiverId", "name");
 
-        res.json({
-            success: true,
-            data: chat,
-            total: chat.length
-
-        });
+        res.json({ success: true, data: chat, total: chat.length });
     } catch (error) {
         console.error('Error fetching messages:', error);
         res.status(500).json({ error: 'Failed to fetch messages' });
@@ -108,115 +256,110 @@ app.get('/get-messages', async (req, res) => {
 });
 
 
-app.get('/users', async (req, res) => {
+app.get('/users', requireAuth, async (req, res) => {
     try {
-        const users = await User.find({},);
+        // WHY .select('name email'): whitelist response fields.
+        // Default Mongoose returns the FULL document — including the password hash.
+        // Even hashed passwords shouldn't leak (offline brute-force risk).
+        // WHY .lean(): plain JS objects — 2-3x faster serialization for read-only endpoints.
+        const users = await User.find({}).select('name email').lean();
 
-        return res.json({
-            data: users,
-            success: true
-
-        });
-
-
+        return res.json({ success: true, data: users });
     } catch (error) {
-        console.log(`error fetching users ${error}`)
-        res.status(500).json({
-            error: 'Failed to fetch users'
-        })
+        console.error('Error fetching users:', error)
+        res.status(500).json({ error: 'Failed to fetch users' })
     }
 });
 
 
-// "Login or create" — looks up the user by name; creates them if missing.
-// TEMPORARY pattern for the MVP. Phase 2 replaces this with proper JWT auth (signup + login + password).
-app.post("/users", async (req, res) => {
-    const { name } = req.body;
+// ════════════════════════════════════════════════════════════════════════════
+// HTTP server + Socket.IO
+// ════════════════════════════════════════════════════════════════════════════
 
-    if (!name) {
-        return res.status(400).json({ message: 'Missing fields' });
-    }
-
-    try {
-        // Try to find first
-        let user = await User.findOne({ name }).lean();
-
-        // If not found, create
-        if (!user) {
-            const created = await User.create({ name });
-            user = created.toObject();
-        }
-
-        res.json({
-            success: true,
-            data: user,
-        });
-    } catch (error) {
-        console.error('Error in login-or-create:', error);
-        res.status(500).json({ error: 'Failed to login or create user' });
-    }
-
-});
-
-
-
-//Why CORS again?
-//Express has its own CORS middleware (you set that up earlier). Socket.IO has its own separate CORS config because WebSocket upgrade requests bypass Express middleware entirely.
-
-//The cors: { origin: '*' } allows the frontend (port 5173) to connect to the Socket.IO server (port 3000). In production you'd lock it to your real domain.
-
-//Socket.IO needs the raw Node HTTP server, not Express's wrapper. Express runs ON TOP of HTTP — but Socket.IO needs to attach AT the HTTP level so it can intercept WebSocket upgrade requests.
-//Both Express and Socket.IO share the same HTTP server.
-// 1. Wrap the express app in a raw HTTP server
+// WHY createServer(app): Socket.IO needs the raw Node HTTP server to attach to,
+// because WebSocket connections start as HTTP "Upgrade" requests that bypass Express.
+// Express is just an HTTP request handler; we wrap it manually so Socket.IO can share the same port.
 const httpServer = createServer(app);
 
+// WHY a separate cors config here: Socket.IO's WebSocket upgrade requests skip
+// Express's middleware chain — including our app.use(cors()). Socket.IO needs its own.
 const io = new Server(httpServer, {
     cors: {
-        origin: '*', //    // allow any origin (dev only — tighten later)
+        origin: '*',                          // dev only — lock to your real frontend in production
         methods: ['GET', 'POST'],
     }
 })
 
-// 3. Listen for connections
-io.on('connection', (socket) => {
-    // TODO 1: console.log when a user connects.
-    //         Hint: socket.id is a unique ID auto-assigned to each connection.
 
-    // 1. Log when a new connection opens
+/**
+ * Socket.IO auth middleware.
+ * WHY io.use: runs BEFORE the connection completes, on every connection attempt.
+ * If we just verified inside io.on('connection'), the client would already be connected
+ * and could fire events before we caught them. Middleware lets us reject upfront.
+ */
+io.use((socket, next) => {
+    // WHY socket.handshake.auth: the client's `io(URL, { auth: { token } })` option lands here.
+    const token = socket.handshake.auth?.token
+
+    if (!token) {
+        return next(new Error('No token provided'))
+    }
+    try {
+        const decoded = /** @type {{ userId: string }} */ (
+            jwt.verify(token, process.env.JWT_SECRET)
+        )
+
+        // WHY socket.data: per-socket trusted state, same idea as req.userId.
+        // It survives the connection's lifetime and is accessible in every event handler.
+        socket.data.userId = decoded.userId
+        next()                                    // WHY next() with no args: allow the connection
+    } catch (error) {
+        next(new Error('Invalid or expired token'))    // WHY next(Error): rejects the connection
+    }
+})
+
+
+io.on('connection', (socket) => {
+    // userId is GUARANTEED here because io.use middleware rejected any unauthenticated socket.
+    const userId = socket.data.userId
     console.log('User connected:', socket.id)
 
-    socket.on('join', (userId) => {
-        socket.join(userId)
-        console.log(`Socket ${socket.id} joined room ${userId}`)
-        socket.data.userId = userId
-        onlineUsers.add(userId)
-        io.emit('online-users', Array.from(onlineUsers)) // ← tell EVERYONE the new list
+    // WHY socket.join(userId): puts this socket in a room named after the user.
+    // Later, io.to(userId).emit(...) reaches only sockets in that room — targeted delivery.
+    // If the user has multiple tabs, all their sockets land in the same room and receive together.
+    socket.join(userId)
+    onlineUsers.add(userId)
 
+    // WHY io.emit (not io.to): broadcast the online list to ALL connected clients.
+    // Everyone needs to see who came online — not targeted, so plain io.emit.
+    io.emit('online-users', Array.from(onlineUsers))
+
+
+    socket.on('typing', ({ to }) => {
+        // WHY from = socket.data.userId (not from the client payload):
+        // a user could send `{ to, from: 'someone-else' }` and spoof another user typing.
+        // Always derive identity from the verified socket — same IDOR rule as REST.
+        const from = socket.data.userId
+        io.to(to).emit('typing', { from })
     })
 
-    socket.on('typing', ({ to, from }) => {
-        socket.to(to).emit('typing', { from })
-
-    })
-    socket.on('stop-typing', ({ to, from }) => {
+    socket.on('stop-typing', ({ to }) => {
+        const from = socket.data.userId
         io.to(to).emit('stop-typing', { from })
     })
 
 
-
-    // 2. Log when connection closes (browser closed, network drop, etc.)
     socket.on('disconnect', () => {
-        if (socket.data.userId) {
-            onlineUsers.delete(socket.data.userId)              // ← mark offline
-            io.emit('online-users', Array.from(onlineUsers))
-        }
+        // WHY remove + re-broadcast: keep online-users list accurate when users close their tabs.
+        onlineUsers.delete(userId)
+        io.emit('online-users', Array.from(onlineUsers))
         console.log('User disconnected:', socket.id)
     })
 })
 
 
-// 4. Listen on the HTTP server (NOT app.listen anymore!)
-
+// WHY httpServer.listen (not app.listen): the HTTP server hosts BOTH Express and Socket.IO.
+// app.listen would only start Express — Socket.IO would never accept WebSocket connections.
 httpServer.listen(3000, () => {
     console.log('Server is running on http://localhost:3000')
 });
