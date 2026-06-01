@@ -1,9 +1,10 @@
 import { useState, type FormEventHandler } from "react"
 import { useNavigate, Link } from "react-router-dom"
 import { API_URL } from "../../config"
-import "./logic.css"
+import "../login/logic.css"   // reuse the same auth styles
 
-function Login() {
+function Signup() {
+  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -17,18 +18,17 @@ function Login() {
     setLoading(true)
 
     try {
-      const res = await fetch(`${API_URL}/login`, {
+      const res = await fetch(`${API_URL}/sign-up`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ name, email, password }),
       })
       const json = await res.json()
 
       if (!res.ok) {
-        throw new Error(json.error || json.message || 'Login failed')
+        throw new Error(json.error || json.message || 'Signup failed')
       }
 
-      // Persist auth: token across refreshes, user for the current tab/browser
       localStorage.setItem('token', json.token)
       sessionStorage.setItem('user', JSON.stringify(json.user))
 
@@ -43,12 +43,25 @@ function Login() {
   return (
     <div className="login-page">
       <div className="login-card">
-        <h1 className="login-title">Welcome back</h1>
-        <p className="login-subtitle">Sign in to continue chatting</p>
+        <h1 className="login-title">Create your account</h1>
+        <p className="login-subtitle">Sign up to start chatting</p>
 
         {error && <p className="login-error">{error}</p>}
 
         <form className="login-form" onSubmit={handleSubmit}>
+          <label className="login-label">
+            Name
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="login-input"
+              placeholder="Your name"
+              required
+              autoComplete="name"
+            />
+          </label>
+
           <label className="login-label">
             Email
             <input
@@ -69,23 +82,24 @@ function Login() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="login-input"
-              placeholder="Enter your password"
+              placeholder="At least 6 characters"
               required
-              autoComplete="current-password"
+              minLength={6}
+              autoComplete="new-password"
             />
           </label>
 
           <button type="submit" className="login-button" disabled={loading}>
-            {loading ? 'Signing in…' : 'Sign in'}
+            {loading ? 'Creating account…' : 'Create account'}
           </button>
         </form>
 
         <p className="login-footer">
-          New here? <Link to="/">Create an account</Link>
+          Already a user? <Link to="/login">Sign in</Link>
         </p>
       </div>
     </div>
   )
 }
 
-export default Login
+export default Signup

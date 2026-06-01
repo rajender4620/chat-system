@@ -27,16 +27,24 @@ function Dashboard() {
   const selectedUserId = searchParams.get('chat');
 
   useEffect(() => {
-    if (!me) navigate("/");
+    if (!me) navigate("/login");
   }, [me, navigate]);
 
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    sessionStorage.removeItem('user');
+    navigate('/login');
+  };
+
   useEffect(() => {
+    const token = localStorage.getItem('token');
     const loadUsers = async () => {
       try {
         const res = await fetch(`${API_URL}/users`, {
           method: "GET",
           headers: {
             "content-type": "application/json",
+            "Authorization": `Bearer ${token}`
           },
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -51,14 +59,24 @@ function Dashboard() {
 
 
   useEffect(() => {
-    const s = io(API_URL)
+    const s = io(API_URL, {
+      "auth": { token: localStorage.getItem('token') }
+    })
     s.on('connect', () => {
       console.log('Connected to server, socket id:', s.id)
-      s.emit('join', me?._id)
+      s.emit('join')
       setSocket(s);
     })
+    s.on('connect_error', (err) => {
+      console.error('Socket auth failed:', err.message)
+      // Optional: force logout
+      localStorage.removeItem('token')
+      sessionStorage.removeItem('user')
+      navigate('/login')
+    })
+
     return () => { s.disconnect() }
-  }, [me?._id])
+  }, [me?._id, navigate])
 
 
   useEffect(() => {
@@ -88,7 +106,17 @@ function Dashboard() {
       {/* ── 30% LEFT: sidebar with search + user list ─────── */}
       <aside className="sidebar">
         {/* Header — shows logged-in user's name */}
-        <div className="sidebar-header">{me.name}</div>
+        <div className="sidebar-header">
+          <span>{me.name}</span>
+          <button
+            type="button"
+            className="logout-btn"
+            onClick={handleLogout}
+            title="Log out"
+          >
+            Logout
+          </button>
+        </div>
 
         {/* Search bar — YOU will wire this to state + filter the list */}
         <div className="sidebar-search">

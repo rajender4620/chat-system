@@ -38,12 +38,15 @@ function ChatPanel({ myId, partnerId, socket, partnerName }: ChatPanelPros) {
         if (!partnerId) return
         const fetchMessages = async () => {
             try {
+                const token = localStorage.getItem('token');
                 const res = await fetch(
                     `${API_URL}/get-messages?senderId=${myId}&receiverId=${partnerId}`,
                     {
                         method: "GET",
                         headers: {
                             "content-type": "application/json",
+                            "Authorization": `Bearer ${token}`
+
                         },
                     },
                 );
@@ -85,10 +88,12 @@ function ChatPanel({ myId, partnerId, socket, partnerName }: ChatPanelPros) {
             };
 
             try {
+                const token = localStorage.getItem('token');
                 const res = await fetch(`${API_URL}/send-message`, {
                     method: "POST",
                     headers: {
                         "content-type": "application/json",
+                        "Authorization": `Bearer ${token}`
                     },
                     body: JSON.stringify(body),
                 });

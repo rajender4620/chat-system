@@ -1,120 +1,152 @@
 /* ============================================================
-   CSS BASICS (Flutter analogies)
-   - A "selector" like .login-page targets every element with className="login-page".
-   - Each { ... } block is like a widget's decoration/style properties.
-   - Properties are written as `key: value;`
+   Auth page styling — used by BOTH Login and Signup.
+   Minimal black & white. Sharp, editorial, no gradients.
    ============================================================ */
 
 
-/* .login-page = the full-screen background wrapper.
-   Flutter analogy: Scaffold body wrapped in a Container with a gradient. */
+/* ── PAGE WRAPPER (light gray, no gradient) ────────────── */
 .login-page {
-    min-height: 100vh;              /* 100vh = 100% of the screen height (Viewport Height).
-                                       Like SizedBox(height: MediaQuery.of(context).size.height) */
-    display: flex;                  /* turn this box into a flexbox container (lets us center children).
-                                       Flutter analogy: like using a Column/Row with mainAxis/crossAxis alignment */
-    align-items: center;            /* center children vertically (cross-axis in flex) */
-    justify-content: center;        /* center children horizontally (main-axis in flex) */
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                                    /* gradient background: blue → purple at a 135° angle.
-                                       Like LinearGradient(begin: topLeft, end: bottomRight, colors: [...]) */
-    padding: 20px;                  /* breathing room on small screens. Same as EdgeInsets.all(20) */
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f5f5f7;
+    padding: 20px;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
 
-/* .login-card = the white card holding the form. */
+/* ── CARD ──────────────────────────────────────────────── */
 .login-card {
-    width: 100%;                    /* take all available width... */
-    max-width: 400px;               /* ...but never grow past 400px. Like ConstrainedBox(maxWidth: 400) */
-    padding: 40px 32px;             /* shorthand: 40px top/bottom, 32px left/right.
-                                       Like EdgeInsets.symmetric(vertical: 40, horizontal: 32) */
-    background: #ffffff;            /* white background. Like Container(color: Colors.white) */
-    border-radius: 12px;            /* rounded corners. Like BorderRadius.circular(12) */
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
-                                    /* drop shadow: 0 offset-x, 10 offset-y, 40 blur, 15% black.
-                                       Like BoxShadow(offset: Offset(0,10), blurRadius: 40, color: ...) */
+    width: 100%;
+    max-width: 400px;
+    padding: 44px 36px;
+    background: #ffffff;
+    border: 1px solid #e5e5e7;
+    border-radius: 14px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);   /* very subtle */
+    animation: cardEnter 0.3s ease-out;
+}
+
+@keyframes cardEnter {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
 }
 
 
-/* .login-title = the big "Welcome back" heading. */
+/* ── TITLE + SUBTITLE ──────────────────────────────────── */
 .login-title {
-    margin: 0 0 8px 0;              /* shorthand: top right bottom left. Only 8px below the title.
-                                       Like Padding(padding: EdgeInsets.only(bottom: 8)) */
-    font-size: 28px;                /* like TextStyle(fontSize: 28) */
-    font-weight: 600;               /* 400 = normal, 600 = semibold, 700 = bold */
-    color: #1a1a1a;                 /* near-black. Like TextStyle(color: Color(0xFF1A1A1A)) */
+    margin: 0 0 8px 0;
+    font-size: 26px;
+    font-weight: 600;
+    color: #111;
+    letter-spacing: -0.3px;
 }
 
-
-/* .login-subtitle = the small grey description under the title. */
 .login-subtitle {
-    margin: 0 0 28px 0;             /* 28px gap before the form starts */
+    margin: 0 0 32px 0;
     font-size: 14px;
-    color: #6b6b6b;                 /* medium grey */
+    color: #86868b;
 }
 
 
-/* .login-form = the column of inputs + button.
-   Flutter analogy: this whole rule is like a Column widget with spacing. */
+/* ── FORM ──────────────────────────────────────────────── */
 .login-form {
-    display: flex;                  /* flexbox again */
-    flex-direction: column;         /* stack children top-to-bottom (default flex is row).
-                                       Like switching from Row to Column */
-    gap: 16px;                      /* 16px space between each child. Like Column(spacing: 16) in Flutter 3.27+ */
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
 }
 
 
-/* .login-label = a single label+input pair (e.g. "Name" + its text field). */
+/* ── LABEL + INPUT ─────────────────────────────────────── */
 .login-label {
     display: flex;
-    flex-direction: column;         /* label text on top, input below it */
-    gap: 6px;                       /* small space between the text and the input box */
+    flex-direction: column;
+    gap: 6px;
     font-size: 13px;
     font-weight: 500;
-    color: #333;                    /* dark grey */
+    color: #1d1d1f;
 }
 
-
-/* .login-input = the text fields themselves. */
 .login-input {
-    padding: 12px 14px;             /* inner space so text isn't glued to the border.
-                                       Like InputDecoration(contentPadding: ...) */
+    padding: 12px 14px;
     font-size: 14px;
-    border: 1px solid #d9d9d9;      /* thin light-grey outline. Like OutlineInputBorder */
-    border-radius: 8px;             /* slightly rounded corners */
-    outline: none;                  /* remove the browser's default ugly blue focus ring
-                                       (we replace it with our own below) */
-    transition: border-color 0.15s ease;
-                                    /* animate border color changes over 150ms.
-                                       Like AnimatedContainer(duration: Duration(milliseconds: 150)) */
-}
-
-
-/* :focus = a "pseudo-class" — applies ONLY when the input is currently focused (clicked into).
-   Flutter analogy: like changing the border in onFocusChange. */
-.login-input:focus {
-    border-color: #667eea;          /* turn border blue when user clicks the field */
-}
-
-
-/* .login-button = the "Login" submit button. */
-.login-button {
-    margin-top: 8px;                /* small extra gap above the button */
-    padding: 12px;
-    font-size: 15px;
-    font-weight: 600;
-    color: #ffffff;                 /* white text */
-    background: #667eea;            /* blue background — same as the focus color, so it feels cohesive */
-    border: none;                   /* remove the default button border */
+    background: #ffffff;
+    border: 1px solid #d2d2d7;
     border-radius: 8px;
-    cursor: pointer;                /* show the hand cursor on hover — signals "this is clickable".
-                                       Flutter handles this automatically via InkWell/MouseRegion */
-    transition: background 0.15s ease;
+    outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    font-family: inherit;
+    color: #1d1d1f;
+}
+
+.login-input:hover {
+    border-color: #a1a1a6;
+}
+
+.login-input:focus {
+    border-color: #111;
+    box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.06);
 }
 
 
-/* :hover = applies ONLY when the mouse is over the button.
-   No Flutter equivalent on mobile — this is a desktop/web interaction. */
+/* ── SUBMIT BUTTON (solid black, minimal) ──────────────── */
+.login-button {
+    margin-top: 8px;
+    padding: 13px;
+    font-size: 15px;
+    font-weight: 500;
+    color: #ffffff;
+    background: #111;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.1s ease, opacity 0.15s ease;
+}
+
 .login-button:hover {
-    background: #5568d3;            /* darker blue on hover — visual feedback */
+    background: #000;
+}
+
+.login-button:active {
+    transform: scale(0.99);
+}
+
+.login-button:disabled {
+    background: #6e6e73;
+    cursor: not-allowed;
+    transform: none;
+}
+
+
+/* ── ERROR MESSAGE ─────────────────────────────────────── */
+.login-error {
+    margin: 0 0 16px 0;
+    padding: 10px 14px;
+    background: #fff5f5;
+    color: #c00;
+    border: 1px solid #ffdada;
+    border-radius: 8px;
+    font-size: 13px;
+}
+
+
+/* ── FOOTER LINK ───────────────────────────────────────── */
+.login-footer {
+    margin: 24px 0 0 0;
+    text-align: center;
+    font-size: 14px;
+    color: #86868b;
+}
+
+.login-footer a {
+    color: #111;
+    font-weight: 500;
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: border-color 0.15s ease;
+}
+
+.login-footer a:hover {
+    border-bottom-color: #111;
 }
