@@ -2,14 +2,13 @@ import express from 'express'
 import mongoose from 'mongoose'
 import cors from 'cors'
 import dotenv from 'dotenv'
-/** @type {import('mongoose').Model} */
 import Message from './models/Message.js'
-/** @type {import('mongoose').Model} */
 import User from './models/User.js'
 import { createServer } from 'http'
 import { Server } from 'socket.io'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
+import Chat from './models/Chat.js';
 
 
 // In-memory set of currently connected user IDs.
@@ -17,7 +16,9 @@ import jwt from 'jsonwebtoken'
 // In production you'd back this with Redis so it survives restarts + works across multiple instances.
 const onlineUsers = new Set();
 
+
 dotenv.config();
+console.log(process.env.JWT_SECRET);
 const JWT_SECRET = process.env.JWT_SECRET;
 
 // WHY: fail fast at startup if the secret is missing.
@@ -182,9 +183,6 @@ app.post('/login', async (req, res) => {
 
 
 app.post('/send-message', requireAuth, async (req, res) => {
-    // WHY req.userId (not req.body.senderId): the token is the ONLY trustworthy source of identity.
-    // If we read senderId from the body, an authenticated user could pass anyone else's ID
-    // and impersonate them. Classic IDOR vulnerability.
     const senderId = req.userId
     const { receiverId, message } = req.body;
 
@@ -193,22 +191,39 @@ app.post('/send-message', requireAuth, async (req, res) => {
     }
 
     try {
-        const created = await Message.create({ senderId, receiverId, message });
+        // 1. Look up sender's name (for denormalization)
+        const senderUser = await User.findById(senderId).select('name').lean()
+        let chat = await Chat.findOne({
+            participants: {
+                $all: [
+                    senderId, receiverId
+                ]
+            }
+        })
 
-        // WHY re-fetch with populate + lean:
-        //   .populate() → expands senderId from an ID into { _id, name } so the frontend
-        //     doesn't need a second request to know who sent it. (Mongoose's JOIN equivalent.)
-        //   .lean() → returns a plain object instead of a Mongoose Document, which is
-        //     faster to serialize and avoids circular-reference issues with JSON.stringify.
-        //   The shape MUST match what GET /get-messages returns — frontend trusts a stable contract.
-        const newMessage = await Message.findById(created._id)
-            .populate('senderId', 'name')
-            .populate('receiverId', 'name')
-            .lean()
+        if (!chat) {
+            chat = await Chat.create({
+                participants: [
+                    senderId, receiverId
+                ]
+            })
+        }
+        const created = await Message.create({
+            chatId: chat._id, sender: {
+                _id: senderId, name: senderUser.name
+            }, text: message
+        });
+        // 4. Update the chat's cached preview + activity (for sidebar)
+        chat.lastMessage = {
+            text: message,
+            senderId: new mongoose.Types.ObjectId(senderId),
+            createdAt: new Date(),
+        }
+        chat.lastActivity = new Date()
+        await chat.save()
 
-        // WHY io.to(receiverId).emit (not io.emit): targeted delivery via the user's room.
-        // Each user joined a room named after their _id on connect, so this reaches ONLY them.
-        // The sender sees their message via optimistic UI; they don't need a separate emit.
+        // 5. Push to receiver's room in real time
+        const newMessage = created.toObject()
         io.to(receiverId).emit('new-message', newMessage)
 
         res.json({
@@ -223,17 +238,78 @@ app.post('/send-message', requireAuth, async (req, res) => {
 })
 
 
+
+app.get('/messages', requireAuth, async (req, res) => {
+    try {
+        const { chatId } = req.query;
+        console.log(` gegg : ${chatId}`);
+
+        const chat = await Chat.findById(chatId)
+        if (!chat) return res.status(404).json({ error: 'Chat not found' })
+
+        // Check the requester is in this chat's participants
+        const isParticipant = chat.participants.some(p => p.equals(req.userId))
+        if (!isParticipant) {
+            return res.status(403).json({ error: 'Not a participant of this chat' })
+        }
+
+        const messages = await Message.find({
+            chatId
+        }).sort({ createdAt: 1 }).lean()
+        console.log(messages)
+
+        res.json({
+            success: true,
+            data: messages
+        })
+
+
+
+    } catch (error) {
+        console.error('Error fetching messages:', error)
+        res.status(500).json({ error: 'Failed to fetch messages' })
+    }
+
+})
+
+
+
+app.get('/chats', requireAuth, async (req, res) => {
+    try {
+        const userId = req.userId;
+        const chats = await Chat.find({
+            participants: {
+                $in: [
+                    userId
+                ]
+            }
+        }).sort({
+            lastActivity: -1
+        }).populate('participants', 'name email').lean()
+
+        res.json({ success: true, data: chats })
+
+    } catch (error) {
+        console.error('Error fetching chats:', error)
+        res.status(500).json({ error: 'Failed to fetch chats' })
+    }
+})
+
+
+
+
 app.get('/get-messages', requireAuth, async (req, res) => {
     // WHY senderId from token, receiverId from query: same IDOR-prevention rule.
     // "Who I am" comes from the verified token; "who I'm chatting with" is a UI choice.
     const senderId = req.userId
     const { receiverId } = req.query
 
-    if (!senderId || !receiverId) {
-        return res.status(400).json({ error: 'Missing fields' })
-    }
-
     try {
+
+        if (!senderId || !receiverId) {
+            return res.status(400).json({ error: 'Missing fields' })
+        }
+
         // WHY $or with both directions: a conversation is bidirectional.
         // Messages were stored with whoever sent them as senderId, so we need BOTH
         // {senderId: me, receiverId: them} AND {senderId: them, receiverId: me}.

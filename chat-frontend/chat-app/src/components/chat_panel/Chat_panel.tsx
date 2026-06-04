@@ -4,87 +4,91 @@ import { API_URL } from "../../config";
 
 type ChatPanelPros = {
     myId: string;
-    partnerId: string | null;
-    socket?: Socket | null;
+    chatId: string | null;                       // existing chat _id, or null for a new chat
+    partnerId: string | null;                    // who we're talking to (for send + typing)
     partnerName?: string | null;
+    socket?: Socket | null;
+    onChatCreated?: (newChatId: string) => void; // called when first message creates a chat
 };
 
 type Message = {
     _id: string;
-    message: string;
-    senderId: {
-        _id: string;
-        name: string;
-    };
-    receiverId: {
-        _id: string;
-        name: string;
-    };
+    chatId?: string;
+    text?: string;
+    message?: string;                            // legacy / optimistic shape
+    sender?: { _id: string; name: string };      // new schema: denormalized embedded sender
+    senderId?: { _id: string; name: string };    // legacy populated shape
+    receiverId?: { _id: string; name: string };
     createdAt: string;
-    updatedAt?: string
+    updatedAt?: string;
 };
 
-function ChatPanel({ myId, partnerId, socket, partnerName }: ChatPanelPros) {
+// Helpers — unify access across old + new shapes
+const getSenderId = (msg: Message): string =>
+    msg.sender?._id || msg.senderId?._id || '';
+
+const getText = (msg: Message): string =>
+    msg.text || msg.message || '';
+
+
+function ChatPanel({ myId, chatId, partnerId, partnerName, socket, onChatCreated }: ChatPanelPros) {
     const [messages, setMessages] = useState<Message[]>([]);
     const [draft, setDraft] = useState("");
-    const bottomRef = useRef<HTMLDivElement>(null)
-    const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
-    const [partnerTyping, setPartnerTyping] = useState(false)
+    const bottomRef = useRef<HTMLDivElement>(null);
+    const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [partnerTyping, setPartnerTyping] = useState(false);
 
-
-
-
+    // ──────────────────────────────────────────────────────────────
+    // Fetch messages when chatId changes.
+    // For a brand-new chat (no chatId yet) just skip — we start empty.
+    // State reset between chats is handled by the `key` prop in Dashboard (React remounts).
+    // ──────────────────────────────────────────────────────────────
     useEffect(() => {
-        if (!partnerId) return
-        const fetchMessages = async () => {
+        if (!chatId) return;
+        let cancelled = false;
+        (async () => {
             try {
                 const token = localStorage.getItem('token');
-                const res = await fetch(
-                    `${API_URL}/get-messages?senderId=${myId}&receiverId=${partnerId}`,
-                    {
-                        method: "GET",
-                        headers: {
-                            "content-type": "application/json",
-                            "Authorization": `Bearer ${token}`
-
-                        },
+                const res = await fetch(`${API_URL}/messages?chatId=${chatId}`, {
+                    headers: {
+                        "content-type": "application/json",
+                        "Authorization": `Bearer ${token}`,
                     },
-                );
-                if (res.ok) {
-                    const json = await res.json();
-                    console.log(`Backend returned api ${json}`);
-                    setMessages(json.data);
-                }
+                });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const json = await res.json();
+                if (!cancelled) setMessages(json.data);
             } catch (error) {
-                console.log(`error fetching messages ${error}`);
+                console.error('Failed to fetch messages:', error);
             }
-        };
+        })();
+        return () => { cancelled = true; };
+    }, [chatId]);
 
-        fetchMessages();
-    }, [partnerId, myId]);
-
-    console.log(`partner id : ${partnerId}`);
 
     const handleSend = () => {
-        if (!partnerId || !draft.trim()) return
+        if (!partnerId || !draft.trim()) return;
+
+        const text = draft;                       // capture current value before clearing input
 
         const sendMessage = async () => {
-
-            const tempId = 'temp-' + Date.now()        // e.g. 'temp-1730473200000'
-            const optimisticMsg = {
-                _id: tempId,                              // ← fake local ID
-                message: draft,
-                senderId: { _id: myId, name: 'me' },
-                receiverId: { _id: partnerId, name: '' },
+            const tempId = 'temp-' + Date.now();
+            const optimisticMsg: Message = {
+                _id: tempId,
+                chatId: chatId || undefined,
+                text,
+                sender: { _id: myId, name: 'me' },
                 createdAt: new Date().toISOString(),
+            };
+            setMessages(prev => [...prev, optimisticMsg]);
+            setDraft('');
 
-            }
-            setMessages(prev => [...prev, optimisticMsg])
-            setDraft('')
+            // Send both chatId (when we have one) and receiverId.
+            // Backend uses chatId if present, else find-or-creates from receiverId.
             const body = {
-                senderId: myId,
+                chatId,
                 receiverId: partnerId,
-                message: draft,
+                message: text,                    // backend still expects "message"
             };
 
             try {
@@ -93,23 +97,29 @@ function ChatPanel({ myId, partnerId, socket, partnerName }: ChatPanelPros) {
                     method: "POST",
                     headers: {
                         "content-type": "application/json",
-                        "Authorization": `Bearer ${token}`
+                        "Authorization": `Bearer ${token}`,
                     },
                     body: JSON.stringify(body),
                 });
                 if (res.ok) {
                     const json = await res.json();
-                    console.log(`api res : ${json.data}`);
-                    setMessages(prev =>
-                        prev.map(m => m._id === tempId ? json.data : m)
-                        //              ↑ find the temp      ↑ swap in real
-                    )
+                    const real: Message = json.data;
 
+                    // Swap optimistic message with the real one
+                    setMessages(prev => prev.map(m => m._id === tempId ? real : m));
+
+                    // If this was a NEW chat (no chatId yet) and backend created one,
+                    // notify Dashboard so it can refresh sidebar + update URL.
+                    if (!chatId && real.chatId && onChatCreated) {
+                        onChatCreated(real.chatId);
+                    }
+                } else {
+                    throw new Error(`HTTP ${res.status}`);
                 }
             } catch (error) {
-                console.log(`error ${error}`);
-                setMessages(prev => prev.filter(m => m._id !== tempId))
-                alert('Failed to send')
+                console.error('Send failed:', error);
+                setMessages(prev => prev.filter(m => m._id !== tempId));
+                alert('Failed to send');
             }
         };
 
@@ -117,66 +127,72 @@ function ChatPanel({ myId, partnerId, socket, partnerName }: ChatPanelPros) {
     };
 
 
-
+    // ──────────────────────────────────────────────────────────────
+    // Socket: incoming messages
+    // ──────────────────────────────────────────────────────────────
     useEffect(() => {
         if (!socket) return;
 
-        // handler for incoming messages
         const handleNewMessage = (msg: Message) => {
-            if (msg.senderId._id === partnerId) {
-                setMessages(prev => [...prev, msg])
+            // Prefer chatId match (more reliable); fall back to sender match for legacy shape.
+            const matchesByChat = chatId && msg.chatId === chatId;
+            const matchesBySender = !chatId && getSenderId(msg) === partnerId;
+            if (matchesByChat || matchesBySender) {
+                setMessages(prev => [...prev, msg]);
             }
+        };
 
-        }
+        socket.on('new-message', handleNewMessage);
+        return () => { socket.off('new-message', handleNewMessage); };
+    }, [socket, chatId, partnerId]);
 
-        socket.on('new-message', handleNewMessage)
-        return () => {
-            socket.off('new-message', handleNewMessage)
-        }
 
-    }, [socket, partnerId])
-
+    // Auto-scroll to bottom on new message
     useEffect(() => {
-        bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-    }, [messages])
+        bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [messages]);
 
+
+    // ──────────────────────────────────────────────────────────────
+    // Typing indicator
+    // ──────────────────────────────────────────────────────────────
     const handleTyping = () => {
         if (!socket || !partnerId) return;
-
         socket.emit('typing', { to: partnerId, from: myId });
-
-        // reset the "stopped typing" timer
-        if (typingTimeout.current) clearTimeout(typingTimeout.current)
+        if (typingTimeout.current) clearTimeout(typingTimeout.current);
         typingTimeout.current = setTimeout(() => {
-            socket.emit('stop-typing', { to: partnerId, from: myId })
-        }, 1500)
-    }
+            socket.emit('stop-typing', { to: partnerId, from: myId });
+        }, 1500);
+    };
+
     useEffect(() => {
-        if (!socket) return
-
+        if (!socket) return;
         const onTyping = ({ from }: { from: string }) => {
-            if (from === partnerId) setPartnerTyping(true)
-        }
+            if (from === partnerId) setPartnerTyping(true);
+        };
         const onStopTyping = ({ from }: { from: string }) => {
-            if (from === partnerId) setPartnerTyping(false)
-        }
-
-        socket.on('typing', onTyping)
-        socket.on('stop-typing', onStopTyping)
-
+            if (from === partnerId) setPartnerTyping(false);
+        };
+        socket.on('typing', onTyping);
+        socket.on('stop-typing', onStopTyping);
         return () => {
-            socket.off('typing', onTyping)
-            socket.off('stop-typing', onStopTyping)
-        }
-    }, [socket, partnerId])
+            socket.off('typing', onTyping);
+            socket.off('stop-typing', onStopTyping);
+        };
+    }, [socket, partnerId]);
 
 
+    // ──────────────────────────────────────────────────────────────
+    // Render
+    // ──────────────────────────────────────────────────────────────
+
+    // Empty state — nothing selected (no chat, no new-chat partner)
     if (!partnerId) {
-        return <div className="chat-empty">Select a user to start chatting</div>;
+        return <div className="chat-empty">Select a chat — or click + to start a new one.</div>;
     }
+
     return (
         <>
-            {/* HEADER — partner info */}
             <div className="chat-header">
                 <div className="chat-avatar">{partnerName?.[0]?.toUpperCase()}</div>
                 <div className="chat-header-info">
@@ -184,33 +200,29 @@ function ChatPanel({ myId, partnerId, socket, partnerName }: ChatPanelPros) {
                     <span className="chat-header-status">
                         {partnerTyping ? 'typing…' : 'online'}
                     </span>
-
                 </div>
             </div>
 
-            {/* MESSAGES — scrollable list of bubbles.
-            YOU will replace these placeholders with .map() over real messages */}
             <div className="chat-messages">
                 {messages.map((msg) => {
-                    const isMine = msg.senderId._id === myId
-                    const time = new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    const isMine = getSenderId(msg) === myId;
+                    const time = new Date(msg.createdAt).toLocaleTimeString([], {
+                        hour: '2-digit', minute: '2-digit',
+                    });
                     return (
                         <Fragment key={msg._id}>
                             <div className={isMine ? 'chat-bubble sent' : 'chat-bubble received'}>
-                                {msg.message}
+                                {getText(msg)}
                             </div>
                             <span className={isMine ? 'chat-time sent' : 'chat-time received'}>
                                 {time}
                             </span>
                         </Fragment>
-                    )
+                    );
                 })}
-
-
-                <div ref={bottomRef} />        {/* ← invisible scroll anchor */}
+                <div ref={bottomRef} />
             </div>
 
-            {/* INPUT — pinned to bottom */}
             <div className="chat-input-row">
                 <input
                     type="text"
@@ -218,22 +230,17 @@ function ChatPanel({ myId, partnerId, socket, partnerName }: ChatPanelPros) {
                     placeholder="Type a message…"
                     value={draft}
                     onChange={(e) => {
-                        setDraft(e.target.value)
+                        setDraft(e.target.value);
                         handleTyping();
-
                     }}
                     onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                            handleSend(); // run the same code as the Send button
-                        }
+                        if (e.key === "Enter") handleSend();
                     }}
                 />
                 <button
                     type="button"
                     className="chat-send-btn"
-                    onClick={() => {
-                        handleSend();
-                    }}
+                    onClick={handleSend}
                     disabled={!draft.trim()}
                 >
                     ➤

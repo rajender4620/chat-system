@@ -38,8 +38,32 @@ const total = await User.countDocuments({})
 | `$ne` | NOT equal | `{ _id: { $ne: myId } }` |
 | `$gt` / `$gte` | greater than / or equal | `{ age: { $gt: 18 } }` |
 | `$lt` / `$lte` | less than / or equal | `{ age: { $lte: 65 } }` |
-| `$in` | value is in array | `{ status: { $in: ['active', 'pending'] } }` |
-| `$nin` | value is NOT in array | `{ role: { $nin: ['banned', 'deleted'] } }` |
+| `$in` | value IS one of these (field equals ANY) | `{ status: { $in: ['active', 'pending'] } }` |
+| `$nin` | value is NOT in these | `{ role: { $nin: ['banned', 'deleted'] } }` |
+| `$all` | ARRAY field contains ALL of these | `{ participants: { $all: [aliceId, bobId] } }` — find 1-to-1 chat in BOTH directions |
+| `$size` | array has exactly N elements | `{ participants: { $size: 2 } }` — 1-to-1 chats only |
+| `$elemMatch` | ANY array element matches multi-condition | `{ scores: { $elemMatch: { $gte: 80, $lt: 90 } } }` |
+
+### ⚠️ `$in` vs `$all` (commonly confused — bites you in chat schemas)
+
+```js
+// $in — field equals ANY of the values
+User.find({ status: { $in: ['active', 'pending'] } })
+//   matches users with status = 'active' OR 'pending'
+
+// $all — ARRAY field contains ALL of the values
+Chat.find({ participants: { $all: [aliceId, bobId] } })
+//   matches chats whose participants include BOTH alice AND bob (order doesn't matter)
+
+// $in on an ARRAY field = OR semantics (often what you want for tags)
+Article.find({ tags: { $in: ['react', 'node'] } })
+//   matches articles tagged with EITHER react OR node
+```
+
+**Rule of thumb:**
+- "Field equals one of these" → `$in`
+- "Array contains all of these" → `$all`
+- "Array length = N" → `$size`
 | `$exists` | field exists (or not) | `{ avatar: { $exists: true } }` |
 | `$regex` | regex match | `{ name: { $regex: /^al/i } }` (case-insensitive starts with "al") |
 
@@ -211,7 +235,179 @@ if (post.likes.includes(userId)) {
 
 ---
 
-## 10. Interview Talking Points
+## 10. Mongoose Document vs Plain Object (`.toObject()` / `.lean()`)
+
+Critical to understand — bites everyone the first time they hit "Converting circular structure to JSON".
+
+### What `Model.create()` and `Model.findById()` return by DEFAULT
+
+A **Mongoose Document** — a heavy class instance, NOT just data:
+
+```
+Mongoose Document:
+┌──────────────────────────────────────────────────┐
+│  _doc: { _id, text, sender, ... }    ← real data │
+│  schema: <reference to schema>                   │
+│  $__: { activePaths, getters, ... }  ← tracking  │
+│  isNew: false,                                   │
+│  errors: undefined,                              │
+│  save: function,                                 │
+│  validate: function,                             │
+│  populate: function,                             │
+│  toObject: function,                             │
+│  ...lots of internal references                  │
+└──────────────────────────────────────────────────┘
+```
+
+It has methods (`.save()`, `.validate()`), change tracking, and references back to Mongoose internals. ~10x the memory of plain data.
+
+### What `.toObject()` returns
+
+Stripped to JUST the data:
+
+```
+Plain JS object:
+┌──────────────────────────────────────┐
+│  _id, text, sender, createdAt, ...   │
+└──────────────────────────────────────┘
+```
+
+No methods, no tracking, no references — just what you'd see in `console.log` clean.
+
+### `.toObject()` vs `.lean()`
+
+| Method | When | Use case |
+|---|---|---|
+| `.toObject()` | Called on an existing Document | After `Model.create()` — you already have the doc, just want plain |
+| `.lean()` | Chained on a Query before await | At query time — skips creating the Document wrapper at all (faster) |
+
+```js
+// AT QUERY TIME — use .lean() (faster, never creates the Document)
+const user = await User.findById(id).lean()                       // ✅
+
+// AFTER CREATE — use .toObject() (Document already exists)
+const created = await Message.create({...})
+const plain = created.toObject()                                  // ✅
+
+// ❌ WRONG — .lean() doesn't apply after create
+const created = await Message.create({...})
+// created.lean() — there's no .lean() method
+```
+
+### When NOT to convert
+
+When you still need to use the Document's methods:
+```js
+const msg = await Message.findById(id)
+msg.text = 'updated'
+await msg.save()                       // ← need Document for this
+
+// vs
+
+const msg = await Message.findById(id).lean()
+msg.text = 'updated'
+// no .save() method — change exists only in memory
+await Message.updateOne({ _id: id }, { text: 'updated' })   // manual update
+```
+
+### Why this matters in real bugs
+
+- `JSON.stringify(document)` can throw "circular structure" — your `/users` bug
+- Heavy memory if returning thousands of Documents (use `.lean()` for list endpoints)
+- The `getters/virtuals` Document feature only works on Documents — `.lean()` skips them
+
+### Interview answer
+
+> *"By default Mongoose returns Document instances — wrappers with methods, change-tracking, and references to the schema. For read-only endpoints I use `.lean()` to skip wrapper creation entirely — 2-3x faster, lower memory, no circular-ref serialization quirks. For results from `.create()` where I already have a Document, `.toObject()` strips to plain. I only keep Documents when I'll call `.save()` or trigger middleware."*
+
+---
+
+## 11. Denormalization (the chat schema lesson)
+
+The single most important MongoDB data modeling decision.
+
+### Normalized (referenced) — what every tutorial shows
+
+The sender's name lives ONLY in the users collection. Messages just point.
+
+```
+users:                          messages:
+┌─────────┬─────────┐          ┌─────┬──────────┬───────┐
+│ _id     │ name    │          │ _id │ senderId │ text  │
+├─────────┼─────────┤          ├─────┼──────────┼───────┤
+│ u_alice │ Alice   │          │ m1  │ u_alice  │ hi    │
+│ u_bob   │ Bob     │          │ m2  │ u_bob    │ hey   │
+└─────────┴─────────┘          └─────┴──────────┴───────┘
+                                   │
+                       To display "Alice: hi" you must
+                       JOIN messages to users
+                       (Mongoose `.populate()` does this).
+```
+
+**Tradeoff:** every read needs a JOIN. 100 messages = +1 query for the user lookup.
+
+### Denormalized (embedded) — what real chat apps do
+
+The sender's name is COPIED into every message AT WRITE TIME.
+
+```
+users:                          messages:
+┌─────────┬─────────┐          ┌─────┬───────┬──────────────────────────┬───────┐
+│ _id     │ name    │          │ _id │chatId │ sender (EMBEDDED)        │ text  │
+├─────────┼─────────┤          ├─────┼───────┼──────────────────────────┼───────┤
+│ u_alice │ Alice   │          │ m1  │ c1    │ {_id:u_alice,name:Alice} │ hi    │
+│ u_bob   │ Bob     │          │ m2  │ c1    │ {_id:u_bob,  name:Bob}   │ hey   │
+└─────────┴─────────┘          └─────┴───────┴──────────────────────────┴───────┘
+                                                      ↑
+                                              Name is RIGHT HERE
+                                              — no join needed
+```
+
+### The KEY trade-off — what happens when Alice renames to "Alicia"?
+
+| Model | Result |
+|---|---|
+| **Normalized** | Old messages now say "Alicia: hi" (populate refetches current name). **History rewrites itself.** |
+| **Denormalized** | Old messages still say "Alice: hi". New messages from her say "Alicia". **History is frozen in time.** |
+
+### Which is right? Depends on the app
+
+| App | Pick | Why |
+|---|---|---|
+| WhatsApp / iMessage / chat | **Denormalize** | Sender's name when sent should match history |
+| User profile dashboard | Normalize | Source of truth must update everywhere |
+| Twitter @handles | Mixed | display name updates, @handle preserved |
+| Order line items (price) | Denormalize | The price WHEN you bought it is the truth |
+
+### Storage cost
+
+```
+1M messages, sender field ~30 bytes extra:
+  +30 MB total storage
+```
+
+Cheap. Reads happen far more often than writes — paying disk for read speed is the right trade.
+
+### Pattern in code
+
+```js
+// Capture the sender's current name at write time
+const senderUser = await User.findById(senderId).select('name').lean()
+await Message.create({
+  chatId: chat._id,
+  sender: { _id: senderId, name: senderUser.name },   // ← embedded snapshot
+  text: messageText,
+})
+// Now reads NEVER need to populate. The name is frozen at this moment.
+```
+
+### Interview answer (memorize)
+
+> *"Denormalization makes sense when a field is read frequently and either rarely changes or the historical value matters. Chat sender names are the textbook case — messages are read constantly and a rename shouldn't rewrite history. I embed the sender's name at write time so reads don't need a join, AND history correctly preserves what was true at that moment. The trade-off is disk space (small) and slightly more complex writes (acceptable since chat reads >> writes)."*
+
+---
+
+## 12. Interview Talking Points
 
 - *"I use `$ne` to exclude the current user at query time so MongoDB can use the `_id` index — faster than fetching all and filtering in Node."*
 - *"I chain `.select()` to return only the fields the frontend needs, reducing bandwidth and avoiding leaking sensitive fields like password hashes."*

@@ -53,25 +53,71 @@
 }
 
 .sidebar-search {
+  display: flex;
+  gap: 8px;
+  align-items: center;
   padding: 12px 16px;
   border-bottom: 1px solid #f0f0f3;
 }
 
 .sidebar-search input {
-  width: 100%;
+  flex: 1;                    /* fill remaining width, share the row with the + button */
   padding: 10px 14px;
   font-size: 14px;
   border: 1px solid #e0e0e4;
-  border-radius: 20px;        /* fully rounded — modern search bar look */
+  border-radius: 20px;
   background: #f6f6f9;
   outline: none;
-  box-sizing: border-box;     /* include padding/border in the width calc */
+  box-sizing: border-box;
   transition: border-color 0.15s, background 0.15s;
 }
 
 .sidebar-search input:focus {
   border-color: #667eea;
   background: #ffffff;
+}
+
+/* + button (toggles between chats list and "start new chat" picker) */
+.new-chat-btn {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+.new-chat-btn:hover { background: #1d4ed8; }
+.new-chat-btn:active { transform: scale(0.95); }
+
+/* Empty list message */
+.empty-list {
+  padding: 24px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: #9ca3af;
+}
+
+/* Multi-line user-item: name on top, last message preview below */
+.user-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;               /* allow text-overflow to work */
+  flex: 1;
+}
+
+.last-message-preview {
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 2px;
 }
 
 .user-list {

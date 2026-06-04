@@ -3,19 +3,25 @@ import mongoose from 'mongoose';
 
 const messageSchema = new mongoose.Schema(
     {
-        message: {
+        chatId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Chat',
+            required: true
+        },
+        text: {
             type: String,
             required: true
         },
-        senderId: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: 'User',
-            required: true
-        },
-        receiverId: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: 'User',
-            required: true
+        sender: {
+            _id: {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: 'User',
+                required: true
+            },
+            name: {
+                type: String,
+                required: true
+            }
         },
     },
     {
@@ -25,4 +31,8 @@ const messageSchema = new mongoose.Schema(
 
 
 const Message = mongoose.model("Message", messageSchema);
+
+// Fast "load messages in this chat, chronological"
+messageSchema.index({ chatId: 1, createdAt: 1 })
+
 export default Message;
