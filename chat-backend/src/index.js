@@ -6,10 +6,11 @@ import Message from './models/Message.js'
 import User from './models/User.js'
 import { createServer } from 'http'
 import { Server } from 'socket.io'
-import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import Chat from './models/Chat.js';
-
+import requireAuth from './middleware/requireAuth.js';
+import { errorHandler } from './middleware/errorHandler.js';
+import authRoutes from './modules/auth/auth.routes.js';
 
 // In-memory set of currently connected user IDs.
 // WHY: tracking online status without a DB round-trip — flushed on server restart.
@@ -25,40 +26,6 @@ const JWT_SECRET = process.env.JWT_SECRET;
 // Without it, jwt.sign throws cryptic errors per-request instead of one clear startup error.
 if (!JWT_SECRET) {
     throw new Error('JWT_SECRET is missing in .env');
-}
-
-
-/**
- * Auth middleware. Runs BEFORE protected route handlers.
- * WHY exists: a token verified here is the ONLY trusted source of "who is calling".
- * Route handlers should read req.userId from this, never from req.body / req.query —
- * otherwise an authenticated user could impersonate another by passing their ID (IDOR).
- */
-function requireAuth(req, res, next) {
-    // WHY split on space: industry convention "Authorization: Bearer <token>"
-    const authHeader = req.headers.authorization
-    const token = authHeader?.split(' ')[1]
-
-    if (!token) {
-        return res.status(401).json({ error: 'No token provided' })
-    }
-
-    try {
-        // WHY the JSDoc cast: jwt.verify's return type is `string | JwtPayload`.
-        // Casting tells TS the payload shape we put in at signing time.
-        const decoded = /** @type {{ userId: string }} */ (
-            jwt.verify(token, process.env.JWT_SECRET)
-        )
-
-        // WHY attach to req: makes the verified userId available to the route handler
-        // — same trick as Express's own req.body via express.json() middleware.
-        req.userId = decoded.userId
-        next()
-    } catch (error) {
-        // WHY catch: jwt.verify THROWS on invalid/expired/malformed tokens.
-        // One catch covers all failure modes; client gets a clean 401.
-        return res.status(401).json({ error: 'Invalid or expired token' })
-    }
 }
 
 
@@ -90,96 +57,9 @@ app.get('/', (req, res) => {
 })
 
 
-app.post('/sign-up', async (req, res) => {
-    try {
-        const { name, email, password } = req.body;
-
-        if (!name || !email || !password) {
-            // WHY 400 (not 401): the request is malformed (missing data).
-            // 401 means "auth required/failed" — different semantic.
-            return res.status(400).json({ message: 'Missing fields' })
-        }
-
-        // WHY check first: we want a clean 409 instead of a Mongoose duplicate-key error.
-        // (For production at scale, add a unique index on `email` and catch the duplicate error
-        //  to avoid a race condition between this check and User.create.)
-        const userExist = await User.findOne({ email })
-        if (userExist) {
-            // WHY 409 Conflict: REST convention for "resource already exists".
-            return res.status(409).json({ error: 'Email already in use' })
-        }
-
-        // WHY hash cost 10: bcrypt is deliberately SLOW. Cost factor controls how slow.
-        // 10 = ~100ms per hash on modern hardware — fast enough for users, slow enough
-        // that an attacker brute-forcing leaked hashes can only try ~10/sec per CPU.
-        const hashed = await bcrypt.hash(password, 10)
-
-        const user = await User.create({ name, email, password: hashed })
-
-        // WHY put only userId in payload: payload is base64 (NOT encrypted) — anyone can read it.
-        // Never put sensitive data in JWTs.
-        // WHY expiresIn '7d': limits damage if the token is stolen. After 7 days the user re-logs in.
-        const token = jwt.sign(
-            { userId: user._id },
-            process.env.JWT_SECRET,
-            { expiresIn: '7d' }
-        )
-
-        // WHY explicit user object (not `user`): NEVER return the password (even the hash).
-        // Limit attack surface — if this response is ever logged or cached, no credential exposure.
-        res.json({
-            success: true,
-            token,
-            user: { _id: user._id, name: user.name, email: user.email },
-        });
-
-    } catch (error) {
-        console.error('Signup error:', error)
-        res.status(500).json({ error: 'Failed to sign up' })
-    }
-})
-
-
-app.post('/login', async (req, res) => {
-    try {
-        const { email, password } = req.body;
-
-        if (!email || !password) {
-            return res.status(400).json({ message: 'Missing fields' })
-        }
-
-        const user = await User.findOne({ email });
-
-        // WHY same generic message for both "user not found" and "wrong password":
-        // prevents email enumeration — attackers can't tell whether a given email
-        // is registered. Status code AND message must match between the two cases.
-        if (!user) {
-            return res.status(401).json({ error: 'Invalid email or password' })
-        }
-
-        // WHY bcrypt.compare: bcrypt is ONE-WAY — we can't decrypt the hash.
-        // .compare hashes the entered password with the same salt and checks equality.
-        const isMatch = await bcrypt.compare(password, user.password)
-        if (!isMatch) {
-            return res.status(401).json({ error: 'Invalid email or password' })
-        }
-
-        const token = jwt.sign(
-            { userId: user._id },
-            process.env.JWT_SECRET,
-            { expiresIn: '7d' }
-        )
-
-        res.json({
-            success: true,
-            token,
-            user: { _id: user._id, name: user.name, email: user.email },
-        })
-    } catch (error) {
-        console.error('Login error:', error)
-        res.status(500).json({ error: 'Failed to log in' })
-    }
-})
+// Auth module — /sign-up and /login now live in modules/auth/*.
+// WHY app.use here: mounts the auth Router so index.js no longer holds that logic.
+app.use('/', authRoutes)
 
 
 app.post('/send-message', requireAuth, async (req, res) => {
@@ -346,6 +226,12 @@ app.get('/users', requireAuth, async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch users' })
     }
 });
+
+
+// Global error handler — MUST be last, after every route above.
+// Anything a route throws (or a rejected promise on Express 5) lands here and gets
+// logged + turned into a clean JSON response in ONE place.
+app.use(errorHandler)
 
 
 // ════════════════════════════════════════════════════════════════════════════

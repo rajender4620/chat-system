@@ -4,12 +4,24 @@ const userSchema = new mongoose.Schema(
     {
         name: {
             type: String,
+            required: true,
+            trim: true
         },
         email: {
-            type: String
+            type: String,
+            required: true,
+            unique: true,
+            lowercase: true,
+            trim: true
         },
         password: {
-            type: String
+            type: String,
+            required: true
+        },
+        role: {
+            type: String,
+            enum: ["admin", "teacher", "student"],
+            default: "student"
         }
     },
     {
@@ -17,6 +29,6 @@ const userSchema = new mongoose.Schema(
     }
 );
 
-
 const User = mongoose.model("User", userSchema);
+
 export default User;
