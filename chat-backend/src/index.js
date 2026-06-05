@@ -11,6 +11,7 @@ import Chat from './models/Chat.js';
 import requireAuth from './middleware/requireAuth.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import authRoutes from './modules/auth/auth.routes.js';
+import requireRole from './middleware/requireRole.js';
 
 // In-memory set of currently connected user IDs.
 // WHY: tracking online status without a DB round-trip — flushed on server restart.
@@ -176,7 +177,30 @@ app.get('/chats', requireAuth, async (req, res) => {
 })
 
 
+app.patch('/users/:id/role', requireAuth, requireRole('admin'), async (req, res) => {
+    try {
 
+        const { role } = req.body;
+        console.log(`role: ${role}`)
+        const allowed = ['admin', 'teacher', 'student']
+        if (!allowed.includes(role)) {
+            return res.status(400).json({ error: 'Invalid role' })
+        }
+
+        const updated = await User.findByIdAndUpdate(
+            req.params.id,
+            { role },
+            { new: true }
+        ).select('-password')
+        if (!updated) return res.status(404).json({ error: 'User not found' })
+        res.json({ success: true, data: updated })
+
+    } catch (error) {
+        console.error('Change role error:', error)
+        res.status(500).json({ error: 'Failed to change role' })
+    }
+
+});
 
 app.get('/get-messages', requireAuth, async (req, res) => {
     // WHY senderId from token, receiverId from query: same IDOR-prevention rule.

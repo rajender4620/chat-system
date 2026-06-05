@@ -30,7 +30,7 @@ function signToken(userId, role) {
  * Whitelisting the fields here means even hashed credentials can't escape by accident.
  */
 function toPublicUser(user) {
-    return { _id: user._id, name: user.name, email: user.email }
+    return { _id: user._id, name: user.name, email: user.email, role: user.role }
 }
 
 export async function signup({ name, email, password }) {

@@ -103,9 +103,9 @@ Format: *As a [role], I can [one thing]*. Tick each when it works. Build in this
 (each epic unlocks the next). Epics 0–3 alone make a real, demoable app.
 
 ### Epic 0 — Roles (foundation)
-- [ ] **0.1** Every user has a `role` (admin/teacher/student), default student *(add field to User)*
-- [ ] **0.2** A `requireRole('admin')` middleware that returns 403 for the wrong role
-- [ ] **0.3** Admin can change a user's role *(PATCH endpoint)*
+- [x] **0.1** Every user has a `role` (admin/teacher/student), default student *(add field to User)*
+- [x] **0.2** A `requireRole('admin')` middleware that returns 403 for the wrong role *(role carried in JWT — Option A; requireAuth sets req.userRole)*
+- [x] **0.3** Admin can change a user's role *(PATCH /users/:id/role — validates role 400, 404 if missing, returns updated user without password)*
 
 ### Epic 1 — Courses (first full CRUD loop)
 - [ ] **1.1** Admin can create a course (name, description) *(schema + POST)*
@@ -161,6 +161,10 @@ Format: *As a [role], I can [one thing]*. Tick each when it works. Build in this
 - ✅ Chat app working (auth, 1-to-1 messaging, presence, typing).
 - ✅ Auth extracted into `modules/auth/*`, with a shared `AppError` and a global `errorHandler`
   middleware (Express 5 auto-forwards rejected promises). *(Further refactoring is deprioritized.)*
-- ⬜ Institute platform: not started. **Next story: 0.1 — add `role` to the User schema.**
+- ✅ Story 0.1 — `role` field on User (enum admin/teacher/student, default student).
+- ✅ Story 0.2 — `role` in JWT payload (Option A); `requireAuth` sets `req.userId` + `req.userRole`;
+  `requireRole(...roles)` middleware factory returns 403 on mismatch. `toPublicUser` now includes role.
+- ✅ Story 0.3 — `PATCH /users/:id/role` (admin-only via requireRole). Validates role (400), 404 if user missing, returns updated user without password. **Epic 0 (RBAC) COMPLETE.**
+- ⬜ Next: **Epic 1 — Course CRUD. Start with Story 1.1 (admin creates a course).**
 
 > Keep this file updated: tick stories as they're done, and update §9 with where we are.

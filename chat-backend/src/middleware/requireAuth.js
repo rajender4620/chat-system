@@ -17,13 +17,16 @@ function requireAuth(req, res, next) {
     try {
         // WHY the JSDoc cast: jwt.verify's return type is `string | JwtPayload`.
         // Casting tells TS the payload shape we put in at signing time.
-        const decoded = /** @type {{ userId: string }} */ (
+        const decoded = /** @type {{ userId: string , role : string}} */ (
             jwt.verify(token, process.env.JWT_SECRET)
         )
 
         // WHY attach to req: makes the verified userId available to the route handler
         // — same trick as Express's own req.body via express.json() middleware.
         req.userId = decoded.userId
+        // Role comes straight from the verified token (Option A) so requireRole can
+        // authorize without a DB hit. Trade-off: stale until the token expires.
+        req.userRole = decoded.role
         next()
     } catch (error) {
         // WHY catch: jwt.verify THROWS on invalid/expired/malformed tokens.
