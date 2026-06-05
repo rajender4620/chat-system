@@ -1,0 +1,76 @@
+.navbar {
+    display: flex;
+    align-items: center;
+    gap: 28px;
+    height: 56px;
+    padding: 0 24px;
+    background: #ffffff;
+    border-bottom: 1px solid #e5e7eb;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.navbar-brand {
+    font-weight: 800;
+    font-size: 1.15rem;
+    letter-spacing: -0.02em;
+    color: #4f46e5;
+    text-decoration: none;
+}
+
+.navbar-link {
+    text-decoration: none;
+    color: #6b7280;
+    font-weight: 500;
+    font-size: 0.95rem;
+    transition: color 0.15s;
+}
+
+.navbar-link:hover {
+    color: #111827;
+}
+
+/* React Router adds the "active" class to the current route's NavLink */
+.navbar-link.active {
+    color: #4f46e5;
+    font-weight: 700;
+}
+
+.navbar-spacer {
+    margin-left: auto;
+}
+
+.navbar-user {
+    color: #6b7280;
+    font-size: 0.9rem;
+}
+
+.navbar-role {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 2px 8px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #4f46e5;
+    background: #eef2ff;
+    border-radius: 999px;
+}
+
+.navbar-logout {
+    padding: 6px 14px;
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    border-radius: 8px;
+    color: #374151;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.navbar-logout:hover {
+    background: #f3f4f6;
+}

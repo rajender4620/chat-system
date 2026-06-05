@@ -107,11 +107,49 @@ const [me, setMe] = useState<User | null>(null)             // nullable
 const [draft, setDraft] = useState('')                      // inferred as string
 ```
 
-### State is async
+### State is async — the variable does NOT change in the current render
+
 ```tsx
 setCount(5)
-console.log(count)   // ❌ still old value! Re-renders happen on next tick
+console.log(count)   // ❌ still the OLD value (e.g. 0), not 5
 ```
+
+**Why:** each render is a *snapshot*. The `count` variable is a `const` captured for *this*
+run of the component. `setCount(5)` does NOT reach back and change that `const` — it schedules
+a **re-render**, and only in the *next* render does `count` read as `5`.
+
+```tsx
+async function loadCourses() {
+  const json = await res.json()
+  setCourses(json.data)
+  console.log(courses)   // ❌ still []  — this render's snapshot. setCourses doesn't mutate it.
+}
+```
+Nothing is broken — `courses` IS set; it just shows up on the next render (your `.map()` renders it fine).
+
+**How to actually verify state changed:**
+```tsx
+// option A: log in the component body (runs every render)
+console.log('courses now:', courses)
+
+// option B: watch it with an effect (logs only when it changes)
+useEffect(() => { console.log('courses updated:', courses) }, [courses])
+```
+
+**Flutter analogy:** like calling `setState(() => ...)` then reading the field on the same line —
+in React the local `const` is frozen per render, so it literally can't have updated yet.
+
+### Bonus gotcha: don't log objects with a template literal
+```tsx
+console.log(`data: ${json.data}`)   // ❌ "data: [object Object],[object Object]"
+console.log('data:', json.data)     // ✅ real array, expandable in console
+```
+A template literal calls `.toString()` on objects → useless `[object Object]`. Use a comma instead.
+
+### Interview answer
+> *"setState is asynchronous and per-render: the state variable is a const captured in that render's
+> closure, so reading it right after calling the setter gives the old value. The new value only exists
+> in the next render. To observe a change I log in the render body or use an effect keyed on that state."*
 
 ### Rules
 - **Call hooks at the TOP of the component**, never inside `if`, loops, or event handlers.

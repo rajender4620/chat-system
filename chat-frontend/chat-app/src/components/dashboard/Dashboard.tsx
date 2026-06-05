@@ -5,10 +5,11 @@ import ChatPanel from "../chat_panel/Chat_panel";
 import { io, Socket } from "socket.io-client";
 import { API_URL } from "../../config";
 
-type User = {
+export type User = {
   _id: string;
   name: string;
   email?: string;
+  role?: "admin" | "teacher" | "student";   // present after login (backend now returns it)
 };
 
 type Chat = {

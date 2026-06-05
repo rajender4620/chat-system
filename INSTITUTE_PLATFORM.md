@@ -112,10 +112,10 @@ Format: *As a [role], I can [one thing]*. Tick each when it works. Build in this
 - [x] **1.2** Anyone (logged in) can see the list of courses *(GET /courses, populates createdBy name)*
 - [x] **1.3** Admin can edit a course *(PATCH /courses/:id, whitelists title/description, runValidators, 404 guard)*
 - [x] **1.4** Admin can delete a course *(DELETE /courses/:id, 404 guard)*
-- [ ] **1.5** React screen: list courses + "Add course" form
+- [x] **1.5** React screen: list courses + "Add course" form *(Courses.tsx — useEffect GET, controlled form POST, optimistic append, admin-gated; route /courses)*
 
 ### Epic 2 — Batches (references)
-- [ ] **2.1** Admin creates a batch for a course + assigns a teacher
+- [x] **2.1** Admin creates a batch for a course + assigns a teacher *(Batch model: 2 refs course+teacher; POST /batch/:id (courseId in URL), admin-only; service validates teacher's role === 'teacher')*
 - [ ] **2.2** Admin sees all batches; teacher sees only their own *(filtered GET)*
 - [ ] **2.3** React screen for batches
 
@@ -167,6 +167,9 @@ Format: *As a [role], I can [one thing]*. Tick each when it works. Build in this
 - ✅ Story 0.3 — `PATCH /users/:id/role` (admin-only via requireRole). Validates role (400), 404 if user missing, returns updated user without password. **Epic 0 (RBAC) COMPLETE.**
 - ✅ Epic 1 backend COMPLETE — full Course CRUD (`POST/GET/PATCH/DELETE /courses`), module-structured
   (model/service/controller/routes), admin-gated on writes, whitelisted updates, 404 guards.
-- ⬜ Next: **Story 1.5 — React screen (list courses + add-course form)**, OR move to Epic 2 (Batches) backend.
+- ✅ Epic 1 COMPLETE — Course CRUD backend + full Courses.tsx UI: list grid, create/edit (shared form in a
+  MODAL, branches on editingId), delete (confirm), admin-gated, styled (navbar.css, courses.css). Outlet
+  layout shell (Layout.tsx + Navbar.tsx) wraps logged-in pages.
+- ⬜ Next: **Epic 2 — Batches** (backend first: a Batch references BOTH a Course and a teacher User; role-filtered reads).
 
 > Keep this file updated: tick stories as they're done, and update §9 with where we are.

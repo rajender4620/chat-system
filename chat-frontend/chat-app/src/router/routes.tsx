@@ -2,8 +2,11 @@ import { createBrowserRouter } from "react-router-dom"
 import Login from "../components/login/logic"
 import Signup from "../components/signup/Signup"
 import Dashboard from "../components/dashboard/Dashboard"
+import Courses from "../components/courses/Courses";
+import Layout from "../components/layout/Layout";
 
 const router = createBrowserRouter([
+    // Auth pages — NO navbar (bare screens)
     {
         path: "/",
         element: <Signup />,            // signup as the default landing
@@ -12,9 +15,14 @@ const router = createBrowserRouter([
         path: "/login",
         element: <Login />,             // existing users
     },
+
+    // Logged-in pages — wrapped by Layout (navbar + <Outlet/>)
     {
-        path: "/dashboard",
-        element: <Dashboard />,
+        element: <Layout />,            // layout route: no `path`, just wraps its children
+        children: [
+            { path: "/dashboard", element: <Dashboard /> },
+            { path: "/courses", element: <Courses /> },
+        ],
     },
 ])
 
