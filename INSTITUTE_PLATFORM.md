@@ -108,10 +108,10 @@ Format: *As a [role], I can [one thing]*. Tick each when it works. Build in this
 - [x] **0.3** Admin can change a user's role *(PATCH /users/:id/role — validates role 400, 404 if missing, returns updated user without password)*
 
 ### Epic 1 — Courses (first full CRUD loop)
-- [ ] **1.1** Admin can create a course (name, description) *(schema + POST)*
-- [ ] **1.2** Anyone can see the list of courses *(GET)*
-- [ ] **1.3** Admin can edit a course *(PATCH)*
-- [ ] **1.4** Admin can delete a course *(DELETE)*
+- [x] **1.1** Admin can create a course (title, description) *(Course model + POST /courses, admin-only; full module: model/service/controller/routes; sets createdBy from req.userId)*
+- [x] **1.2** Anyone (logged in) can see the list of courses *(GET /courses, populates createdBy name)*
+- [x] **1.3** Admin can edit a course *(PATCH /courses/:id, whitelists title/description, runValidators, 404 guard)*
+- [x] **1.4** Admin can delete a course *(DELETE /courses/:id, 404 guard)*
 - [ ] **1.5** React screen: list courses + "Add course" form
 
 ### Epic 2 — Batches (references)
@@ -165,6 +165,8 @@ Format: *As a [role], I can [one thing]*. Tick each when it works. Build in this
 - ✅ Story 0.2 — `role` in JWT payload (Option A); `requireAuth` sets `req.userId` + `req.userRole`;
   `requireRole(...roles)` middleware factory returns 403 on mismatch. `toPublicUser` now includes role.
 - ✅ Story 0.3 — `PATCH /users/:id/role` (admin-only via requireRole). Validates role (400), 404 if user missing, returns updated user without password. **Epic 0 (RBAC) COMPLETE.**
-- ⬜ Next: **Epic 1 — Course CRUD. Start with Story 1.1 (admin creates a course).**
+- ✅ Epic 1 backend COMPLETE — full Course CRUD (`POST/GET/PATCH/DELETE /courses`), module-structured
+  (model/service/controller/routes), admin-gated on writes, whitelisted updates, 404 guards.
+- ⬜ Next: **Story 1.5 — React screen (list courses + add-course form)**, OR move to Epic 2 (Batches) backend.
 
 > Keep this file updated: tick stories as they're done, and update §9 with where we are.

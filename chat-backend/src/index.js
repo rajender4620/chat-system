@@ -12,6 +12,7 @@ import requireAuth from './middleware/requireAuth.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import authRoutes from './modules/auth/auth.routes.js';
 import requireRole from './middleware/requireRole.js';
+import courseRoutes from './modules/course/course.routes.js';
 
 // In-memory set of currently connected user IDs.
 // WHY: tracking online status without a DB round-trip — flushed on server restart.
@@ -62,6 +63,8 @@ app.get('/', (req, res) => {
 // WHY app.use here: mounts the auth Router so index.js no longer holds that logic.
 app.use('/', authRoutes)
 
+// Course module — /courses lives in modules/course/*.
+app.use('/', courseRoutes)
 
 app.post('/send-message', requireAuth, async (req, res) => {
     const senderId = req.userId

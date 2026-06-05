@@ -310,6 +310,28 @@ msg.text = 'updated'
 await Message.updateOne({ _id: id }, { text: 'updated' })   // manual update
 ```
 
+### You do NOT need to convert just to send a response
+
+`res.json(doc)` runs `JSON.stringify`, and Mongoose Documents have a built-in `.toJSON()`
+that auto-converts to a clean object during serialization. So sending a Document directly works:
+
+```js
+const course = await Course.create({ title, description, createdBy })
+res.status(201).json({ success: true, data: course })   // ✅ serializes fine, no .toObject() needed
+```
+
+Only reach for `.lean()`/`.toObject()` when you want plain objects for SPEED (reads) or to
+MANIPULATE the object before using it — not just to put it in a response.
+
+### Gotcha: `.toObject()` does NOT mutate in place
+
+It RETURNS a new plain object; calling it without assigning does nothing:
+
+```js
+course.toObject()              // ❌ no-op — result thrown away, `course` unchanged
+const plain = course.toObject() // ✅ must capture the return value
+```
+
 ### Why this matters in real bugs
 
 - `JSON.stringify(document)` can throw "circular structure" — your `/users` bug
