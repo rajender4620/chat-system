@@ -146,7 +146,12 @@ function Courses() {
             ) : (
                 <div className="course-grid">
                     {courses.map((c) => (
-                        <div className="course-card" key={c._id}>
+                        <div className="course-card" key={c._id} onClick={() => {
+                            navigate(`/courses/${c._id}/batches`)
+                        }}
+                            style={{ cursor: "pointer" }}
+                        >
+
                             <div className="course-card-head">
                                 <div className="course-card-title">
                                     <span className="course-icon">{c.title?.[0]?.toUpperCase()}</span>
@@ -154,8 +159,14 @@ function Courses() {
                                 </div>
                                 {me?.role === 'admin' && (
                                     <div className="card-actions">
-                                        <button type="button" className="course-edit" title="Edit course" onClick={() => startEdit(c)}>✎</button>
-                                        <button type="button" className="course-delete" title="Delete course" onClick={() => deleteCourse(c._id)}>×</button>
+                                        <button type="button" className="course-edit" title="Edit course" onClick={(e) => {
+                                            e.stopPropagation();
+                                            startEdit(c)
+                                        }}>✎</button>
+                                        <button type="button" className="course-delete" title="Delete course" onClick={(e) => {
+                                            e.stopPropagation();
+                                            deleteCourse(c._id)
+                                        }}>×</button>
                                     </div>
                                 )}
                             </div>

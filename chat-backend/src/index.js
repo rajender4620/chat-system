@@ -14,6 +14,7 @@ import authRoutes from './modules/auth/auth.routes.js';
 import requireRole from './middleware/requireRole.js';
 import courseRoutes from './modules/course/course.routes.js';
 import batchRoutes from './modules/batch/batch.routes.js'
+import enrollRoutes from './modules/enroll/enroll.routes.js'
 
 // In-memory set of currently connected user IDs.
 // WHY: tracking online status without a DB round-trip — flushed on server restart.
@@ -68,6 +69,10 @@ app.use('/', authRoutes)
 app.use('/', courseRoutes)
 
 app.use('/', batchRoutes)
+
+app.use('/', enrollRoutes)
+
+
 app.post('/send-message', requireAuth, async (req, res) => {
     const senderId = req.userId
     const { receiverId, message } = req.body;
@@ -247,7 +252,7 @@ app.get('/users', requireAuth, async (req, res) => {
         // Default Mongoose returns the FULL document — including the password hash.
         // Even hashed passwords shouldn't leak (offline brute-force risk).
         // WHY .lean(): plain JS objects — 2-3x faster serialization for read-only endpoints.
-        const users = await User.find({}).select('name email').lean();
+        const users = await User.find({}).select('name email role').lean();
 
         return res.json({ success: true, data: users });
     } catch (error) {

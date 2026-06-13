@@ -94,3 +94,18 @@ throw new AppError('Course not found', 404)           // resource missing
 - *"401 is authentication, 403 is authorization."*
 - *"400 is a bad request, 404 is a missing resource, 409 is a conflict like a duplicate."*
 - *"4xx is the client's fault, 5xx is mine — that's why I only log 5xx loudly."*
+
+
+## 1. Mongoose field options (what each option means)
+| Option | What it does | When to use | Example |
+|---|---|---|---|
+| `type` | Data type | Always | `String`, `Number`, `Date`, `Boolean`, `mongoose.Schema.Types.ObjectId` |
+| `required: true` | Field must be present on create/save | Core fields | `name: { type: String, required: true }` |
+| `unique: true` | No two docs can have same value (DB index) | email, username | `email: { unique: true }` → duplicate → error **409** |
+| `ref: 'ModelName'` | Points to another collection (like FK) | Relations | `teacher: { type: ObjectId, ref: 'User' }` → use `.populate('teacher')` |
+| `enum: [...]` | Only these strings allowed | roles, status | `role: { enum: ['admin','teacher','student'] }` |
+| `default: value` | Used if not provided | sensible defaults | `role: { default: 'student' }` |
+| `trim: true` | Strips spaces start/end | all user text | `"  bob@x.com  "` → `"bob@x.com"` |
+| `lowercase: true` | Stores as lowercase | emails | `"Bob@X.com"` → `"bob@x.com"` |
+| `timestamps: true` | Auto `createdAt` + `updatedAt` | almost every schema | 2nd arg to `new Schema({...}, { timestamps: true })` |
+| `index` / compound index | Faster queries | frequent filters | `schema.index({ batchId: 1, studentId: 1 }, { unique: true })` |

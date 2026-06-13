@@ -7,4 +7,8 @@ const router = Router();
 
 router.post('/batch/:id', requireAuth, requireRole('admin'), batchController.createbatch)
 
+router.get('/batches', requireAuth, requireRole('admin', 'teacher',), batchController.getbatches)
+
+router.patch('/batch/:id', requireAuth, requireRole('admin'), batchController.editBatch)
+
 export default router;

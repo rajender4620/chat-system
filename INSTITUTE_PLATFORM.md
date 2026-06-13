@@ -116,8 +116,8 @@ Format: *As a [role], I can [one thing]*. Tick each when it works. Build in this
 
 ### Epic 2 — Batches (references)
 - [x] **2.1** Admin creates a batch for a course + assigns a teacher *(Batch model: 2 refs course+teacher; POST /batch/:id (courseId in URL), admin-only; service validates teacher's role === 'teacher')*
-- [ ] **2.2** Admin sees all batches; teacher sees only their own *(filtered GET)*
-- [ ] **2.3** React screen for batches
+- [x] **2.2** Admin sees all batches; teacher sees only their own *(GET /batches, requireRole('admin','teacher'); admin → all, teacher → filtered by teacher: userId; populates teacher name/email + course title)*
+- [x] **2.3** React screen for batches *(Batches.tsx at `/batches` — list grid, admin-only create modal with course + teacher dropdowns; teachers see filtered list; students blocked)*
 
 ### Epic 3 — Enrollment (many-to-many)
 - [ ] **3.1** Admin enrolls a student into a batch
@@ -170,6 +170,11 @@ Format: *As a [role], I can [one thing]*. Tick each when it works. Build in this
 - ✅ Epic 1 COMPLETE — Course CRUD backend + full Courses.tsx UI: list grid, create/edit (shared form in a
   MODAL, branches on editingId), delete (confirm), admin-gated, styled (navbar.css, courses.css). Outlet
   layout shell (Layout.tsx + Navbar.tsx) wraps logged-in pages.
-- ⬜ Next: **Epic 2 — Batches** (backend first: a Batch references BOTH a Course and a teacher User; role-filtered reads).
+- ✅ Story 2.1 — Batch create: `POST /batch/:id` (courseId in URL), admin-only; Batch model with courseId + teacher refs; service validates assigned user has role `teacher`.
+- ✅ Story 2.2 — Batch list: `GET /batches`, requireRole('admin','teacher'); students blocked at middleware (403); admin sees all batches, teacher sees only their own; populates teacher + course title.
+- ✅ Story 2.3 — Batches UI: `Batches.tsx` at `/batches`, list grid, admin-only create modal (course + teacher dropdowns), navbar link for admin/teacher. **Epic 2 COMPLETE.**
+- ✅ Batch extras — course card → `/courses/:courseId/batches`; `useParams` filter; back to courses; `PATCH /batch/:id` (admin edit name/description/schedule/teacher). **Epic 2 COMPLETE.**
+- ⬜ Next: **Epic 3 — Enrollment** (admin enrolls student into batch; student/teacher see their batches).
+- ⬜ Next: **Story 3.1** — Enrollment model + admin enrolls student into batch.
 
 > Keep this file updated: tick stories as they're done, and update §9 with where we are.

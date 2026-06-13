@@ -17,7 +17,7 @@ const batchSchema = new mongoose.Schema(
         schedule: {
             type: String,
         },
-        course: {
+        courseId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'Course',
             required: true

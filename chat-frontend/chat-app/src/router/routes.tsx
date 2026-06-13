@@ -3,6 +3,7 @@ import Login from "../components/login/logic"
 import Signup from "../components/signup/Signup"
 import Dashboard from "../components/dashboard/Dashboard"
 import Courses from "../components/courses/Courses";
+import Batches from "../components/batches/Batches";
 import Layout from "../components/layout/Layout";
 
 const router = createBrowserRouter([
@@ -24,6 +25,10 @@ const router = createBrowserRouter([
             { path: "/courses", element: <Courses /> },
         ],
     },
+    {
+        path: '/courses/:courseId/batches',
+        element: <Batches />
+    }
 ])
 
 export default router
