@@ -21,6 +21,9 @@ import enrollRoutes from './modules/enroll/enroll.routes.js'
 // In production you'd back this with Redis so it survives restarts + works across multiple instances.
 const onlineUsers = new Set();
 
+// PORT=3000
+// JWT_SECRET=3532cc3fb7cf446d8818f995de0dc9f4f4924063f6ab2d3f5885b2fc2fe72e677facdaaf9052953871822de925d9e881ac021b168f92fb5b6f323094ac1a7ded
+// MONGODB_URI=mongodb+srv://rajender4620_db_user:fe2O4lkXzLrVGtLp@cluster0.yvqebx9.mongodb.net/
 
 dotenv.config();
 console.log(process.env.JWT_SECRET);
@@ -48,6 +51,7 @@ app.use(express.json());
 
 mongoose.connect(process.env.MONGODB_URI)
     .then(() => {
+        console.log("Connected Database:", mongoose.connection.name);
         console.log('Connected to MongoDB');
     })
     .catch((error) => {
